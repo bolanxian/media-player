@@ -1,0 +1,22 @@
+{
+  "name": "media-player",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "dplayer": "^1.27.1",
+    "hash-wasm": "^4.9.0",
+    "view-ui-plus": "^1.3.12",
+    "viewerjs": "^1.11.3",
+    "vue": "^3.2.47"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.2.2",
+    "vite": "^4.3.5"
+  }
+}
