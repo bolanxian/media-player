@@ -1,0 +1,105 @@
+@import url('view-ui-plus/dist/styles/viewuiplus.css');
+@import url('viewerjs/dist/viewer.css');
+
+@media(min-width:576px) {
+  .container {
+    max-width: 540px;
+  }
+}
+
+@media(min-width:768px) {
+  .container {
+    max-width: 720px;
+  }
+}
+
+@media(min-width:992px) {
+  .container {
+    max-width: 960px;
+  }
+}
+
+@media(min-width:1200px) {
+  .container {
+    max-width: 1140px;
+  }
+}
+
+.container {
+  margin: 0 auto;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+.ivu-card:hover {
+  z-index: 1;
+}
+
+.dplayer {
+  width: var(--dplayer-width, 960px);
+  height: calc(var(--dplayer-height, 540px) + 41px);
+}
+
+.dplayer .dplayer-mask {
+  height: 41px;
+  top: unset !important;
+}
+
+.dplayer .dplayer-danmaku {
+  pointer-events: none;
+}
+
+.dplayer-controller .dplayer-icons .dplayer-comment {
+  display: none !important;
+}
+
+.dplayer-danmaku .dplayer-danmaku-item {
+  text-shadow: rgba(0, 0, 0, 0.8) 1px 0px 1px,
+    rgba(0, 0, 0, 0.8) 0px 1px 1px,
+    rgba(0, 0, 0, 0.8) 0px -1px 1px,
+    rgba(0, 0, 0, 0.8) -1px 0px 1px !important;
+}
+
+.dplayer-danmaku .dplayer-danmaku-right.dplayer-danmaku-move {
+  animation-duration: 10s !important;
+}
+
+
+.player-hide-layers .dplayer-bezel .dplayer-bezel-icon {
+  display: none !important;
+}
+
+.player-force-show-controls .dplayer.dplayer-fulled {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.player-force-show-controls .dplayer-video-wrap {
+  height: calc(100% - 41px) !important;
+}
+
+.player-force-show-controls .dplayer .dplayer-controller-mask {
+  background-color: rgb(0, 0, 0) !important;
+  background-image: unset !important;
+}
+
+.player-force-show-controls .dplayer .dplayer-controller,
+.player-force-show-controls .dplayer .dplayer-controller-mask {
+  opacity: 1 !important;
+  height: 41px !important;
+  transform: unset !important;
+}
+
+.dplayer-notice-list {
+  position: fixed !important;
+  z-index: 2000;
+}
+
+.player-container {
+  width: min-content;
+  margin: 0 auto;
+  border: 2px solid #CCC;
+}
