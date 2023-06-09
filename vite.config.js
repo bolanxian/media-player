@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, createFilter } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // https://vitejs.dev/config/
@@ -12,6 +12,7 @@ export default defineConfig({
     modulePreload: { polyfill: true },
     cssCodeSplit: false,
     minify: false,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         minifyInternalExports: false
@@ -41,6 +42,18 @@ import pkg from 'view-ui-plus/package.json'
 export const version = pkg.version`
         }
       }
-    }
+    },
+    (() => {
+      const filter = createFilter('**/*.vue.js', 'node_modules/**')
+      const reg = /(?<=[^\w$])__LINE__(?=[^\w$])/, mapFn = (code, line) => code.replace(reg, line)
+      return {
+        name: 'vue-rander-cache',
+        enforce: 'pre',
+        transform(code, id) {
+          if (!filter(id)) { return }
+          return code.split('\n').map(mapFn).join('\n')
+        }
+      }
+    })()
   ]
 })

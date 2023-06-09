@@ -10,40 +10,62 @@
   }
 })(this, function () {
   'use strict';
+  const nextTick = queueMicrotask
+  const { apply } = Reflect
+  const { getOwnPropertyDescriptor: getProp, getOwnPropertyDescriptors: getProps } = Object
+  const { fromEntries, defineProperties: defProps } = Object
+  const { bind: _bind, call: _call } = Function.prototype
+  const { addEventListener: _on } = EventTarget.prototype
+  const signalProto = AbortSignal.prototype, { throwIfAborted: _throwIf } = signalProto
+
+  const on = apply(_bind, _call, [_on]), _options = { once: true }
+  const getAborted = apply(_bind, _call, [getProp(signalProto, 'aborted').get])
+  const getReason = apply(_bind, _call, [getProp(signalProto, 'reason').get])
+  const throwIfAborted = _throwIf != null ? apply(_bind, _call, [_throwIf]) : (signal) => {
+    if (getAborted(signal)) { throw getReason(signal) }
+  }
+
+  const onAbort = (signal, fn) => {
+    if (typeof fn != 'function') { throw new TypeError('onAbort: Argument 2 is not callable.') }
+    const cb = () => { let err; try { err = getReason(signal) } catch (e) { err = e } fn(err) }
+    getAborted(signal) ? nextTick(cb) : on(signal, 'abort', cb, _options)
+  }
+
   const handleError = (resp, signal) => {
     const { error } = resp
     if (typeof error === 'string') {
       if (error === 'aborted') {
-        signal?.throwIfAborted()
+        signal != null && throwIfAborted(signal)
         throw new DOMException('The operation was aborted. ', 'AbortError')
       }
       throw new TypeError(`GM_xmlhttpRequest Error: ${error}`, { cause: resp })
     }
     const { statusText } = resp
-    if (typeof statusText === 'string' && statusText.length) {
+    if (typeof statusText === 'string' && statusText.length > 0) {
       throw new TypeError(`GM_xmlhttpRequest Error: ${statusText}`, { cause: resp })
     }
     throw new TypeError('NetworkError when attempting to fetch resource.', { cause: resp })
   }
   const parseHeaders = (responseHeaders) => {
-    const headers = new Headers()
+    const headers = new Headers(), errors = []
+    let count = 0
     for (let line of String(responseHeaders).split(/\r?\n/)) {
       line = line.trim()
       if (!line) { continue }
       const index = line.indexOf(':')
-      let key, value
-      if (index < 0) {
-        key = line; value = ''
-      } else {
+      let key = line, value = ''
+      if (index >= 0) {
         key = line.slice(0, index).trim()
         value = line.slice(index + 1)
       }
       try {
         headers.append(key, value)
+        count++
       } catch (e) {
-        console.warn(e)
+        errors[errors.length] = e
       }
     }
+    if (count < 1 && errors.length > 0) { throw new AggregateError(errors, 'Parse Headers Error') }
     return headers
   }
   return (GM_xmlhttpRequest) => {
@@ -58,8 +80,8 @@
       }
       init = null
       const { method, url, signal } = request
-      signal.throwIfAborted()
-      let data, done, resp
+      throwIfAborted(signal)
+      let data, resp
       if (!(method === 'GET' || method === 'HEAD')) {
         data = await request.blob()
       }
@@ -67,7 +89,7 @@
         resp = await new Promise((ok, onerror) => {
           const { abort } = GM_xmlhttpRequest({
             method, url, data,
-            headers: Object.fromEntries(request.headers),
+            headers: fromEntries(request.headers),
             anonymous: request.credentials !== 'include',
             responseType: method === 'HEAD' ? 'blob' : responseType,
             onreadystatechange(resp) {
@@ -75,15 +97,11 @@
             },
             onerror, onabort: onerror
           })
-          const onabort = e => { abort(signal.reason) }
-          signal.addEventListener('abort', onabort)
-          done = () => { signal.removeEventListener('abort', onabort) }
+          onAbort(signal, (reason) => { abort(reason) })
         })
       } catch (resp) {
         if (resp instanceof Error) { throw resp }
         handleError(resp, signal)
-      } finally {
-        done?.()
       }
       return new Response(resp.response, {
         url: resp.finalUrl,
@@ -93,8 +111,8 @@
       })
     }
     GM_fetch.responseType = responseType
-    const props = Object.getOwnPropertyDescriptors(GM_xmlhttpRequest)
-    Object.defineProperties(GM_fetch, props)
+    const props = getProps(GM_xmlhttpRequest)
+    defProps(GM_fetch, props)
     return GM_fetch
   }
 });

@@ -37,7 +37,7 @@ export default defineComponent({
       this.current()
     },
     prev() {
-      if (--this.index < 0) { this.index = this.list.length - 1 }
+      if (--this.index < 0) { this.index = (this.list.length || 1) - 1 }
       this.current()
     },
     current() {
@@ -48,14 +48,23 @@ export default defineComponent({
       if (++this.index >= this.list.length) { this.index = 0 }
       this.current()
     },
+    delete(index) {
+      const vm = this, vmIndex = vm.index
+      vm.list.splice(index, 1)
+      if (vmIndex >= vm.list.length) {
+        vm.prev()
+      } else if (vmIndex === index) {
+        vm.current()
+      }
+    },
     openDrawer() { this.isDrawerOpen = true },
     setDrawer(value) { this.isDrawerOpen = value }
   },
-  render() {
+  render(_, cache) {
     const vm = this, { title } = vm
-    return h(Cell, { title }, {
+    return h(Cell, { title }, cache[__LINE__] ??= {
       extra: () => [
-        h(ButtonGroup, null, () => [
+        h(ButtonGroup, null, cache[__LINE__] ??= () => [
           h(Button, { onClick: vm.openDrawer }, () => '详细信息'),
           h(Button, { onClick: vm.prev }, () => '上一个'),
           h(Button, { onClick: vm.next }, () => '下一个')
@@ -64,15 +73,15 @@ export default defineComponent({
           title, width: 384,
           modelValue: vm.isDrawerOpen,
           'onUpdate:modelValue': vm.setDrawer
-        }, () => [
+        }, cache[__LINE__] ??= () => [
           h(CellGroup, {
             onOnClick: vm.set, style: 'padding: 0px'
-          }, () => Array.from(vm.list, (value, index) =>
+          }, cache[__LINE__] ??= () => Array.from(vm.list, (value, index) =>
             h(Cell, {
               title: value.name, name: index, selected: vm.index === index
             }, {
               extra: () => h(Button, {
-                onClick() { vm.list.splice(index, 1) }
+                onClick(e) { e.stopPropagation(); vm.delete(index) }
               }, () => h(Icon, { type: 'md-close' }))
             })
           ))

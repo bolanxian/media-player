@@ -25,6 +25,9 @@ export default defineComponent({
       danmaku.dan = dan.sort((a, b) => (a.time - b.time))
       danmaku.seek()
     },
+    seekDanmaku() {
+      this.player.danmaku.seek()
+    },
     play() {
       this.player.play()
     },
@@ -42,6 +45,12 @@ export default defineComponent({
     },
     relativeSeek(time) {
       this.player.seek(this.video.currentTime + time)
+    },
+    speed(rate) {
+      const { player, video } = this
+      rate = +rate
+      video.playbackRate = rate
+      player.notice(`倍速播放中 (${rate})`, rate === 1 ? 1 : 0, void 0, 'speed')
     }
   },
   mounted() {

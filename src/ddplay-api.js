@@ -54,7 +54,7 @@ export const danFetch = async (url, requestData, init = {}) => {
   if (type === typeJson || type?.startsWith(typeJson)) {
     data = await response.json()
     if (data.errorMessage) {
-      throw new TypeError('DandanPlay API Error: ' + data.errorMessage)
+      throw new TypeError('DandanPlay API Error: ' + data.errorMessage, { cause: data })
     }
   }
   return { request, response, data }

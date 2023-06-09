@@ -62,13 +62,12 @@ export default defineComponent({
     handleDrop(e) {
       const { target } = e
       if (this.global && !this.$el.contains(target) && e.type !== 'paste') {
-        const tag = target.tagName.toUpperCase()
-        const able = target.getAttribute('contenteditable')
-        if ('INPUT' === tag || 'TEXTAREA' === tag || '' === able || 'true' === able) return
+        const tag = target.tagName
+        if ('INPUT' === tag || 'TEXTAREA' === tag || target.isContentEditable) { return }
       }
       e.preventDefault(); e.stopPropagation()
-      const files = (e.dataTransfer ?? e.clipboardData)?.files
-      if (files?.length > 0) {
+      const files = (e.dataTransfer ?? e.clipboardData).files
+      if (files.length > 0) {
         this.$emit('change', Array.from(files))
       }
     }
@@ -107,7 +106,7 @@ export default defineComponent({
       slot != null ? slot() : [
         h('div', { class: 'ivu-card-head', style: 'text-align: left' }, [
           h('p', null, [
-            h(Icon, { type: 'ios-folder-open', style: 'font-size: 20px' }),
+            h(Icon, { type: 'ios-folder-open', size: 20 }),
             `单击或拖动${vm.reason}文件到此${vm.global ? '页面' : '处'}`
           ])
         ]),

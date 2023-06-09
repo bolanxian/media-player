@@ -1,5 +1,5 @@
 
-import { defineComponent, createVNode as h, shallowReactive } from 'vue'
+import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, watch, getCurrentInstance } from 'vue'
 import { Message, Modal, Card, CellGroup, Cell, Input, ButtonGroup, Button } from 'view-ui-plus'
 import { episodeTypes, fetch, match, commentURL, comment } from '../ddplay-api'
 const { isArray } = Array
@@ -17,7 +17,7 @@ function* convertDanmakuToDplayer(comments, offset = 0) {
     }
   }
 }
-function* filterPlatform(danmaku, fn) {
+function* platformFilter(danmaku, fn) {
   const reg = /^\[([^\[\]]+)\]/
   for (const dan of danmaku) {
     const m = String(dan.author).match(reg)
@@ -66,14 +66,13 @@ const modalMatch = (vm) => {
       data.loading = false
     }
   }
-  let modal, input, offset
+  let input, offset
   Modal.confirm({
     title: '将视频关联到弹幕库',
     width: 600,
     loading: true,
     closable: true,
     render() {
-      modal = this
       return h(Card, { padding: 0, 'dis-hover': true }, {
         title: () => h(Input, {
           modelValue: data.name,
@@ -164,7 +163,7 @@ const modalMatch = (vm) => {
         Message.error('弹幕加载失败')
         throw e
       } finally {
-        modal.remove()
+        Modal.remove()
       }
     }
   })
@@ -176,42 +175,39 @@ export default defineComponent({
     file: { type: Blob },
     title: { type: String, default: '' }
   },
-  setup() {
+  setup(props) {
+    const inst = getCurrentInstance(), vm = inst.proxy
+    watch(() => [props.file, props.title], (a, b) => {
+      vm.list = []
+      vm.index = -1
+      vm.$emit('danmaku', vm.danmaku = [])
+      platforms.value = ''
+    })
+    const platforms = sr('')
     return {
       list: [],
+      index: -1,
       danmaku: [],
-      index: -1
-    }
-  },
-  data() {
-    return {
-      platforms: ''
-    }
-  },
-  watch: {
-    file() {
-      this.list = []
-      this.danmaku = []
-      this.index = -1
+      platforms
     }
   },
   methods: {
     loadDanmaku(comments, offset = 0) {
       const vm = this, platformMap = { '!': 0 }
-      let danmaku = convertDanmakuToDplayer(comments, offset)
-      danmaku = filterPlatform(danmaku, (platform, dan) => {
+      let _danmaku = convertDanmakuToDplayer(comments, offset)
+      _danmaku = platformFilter(_danmaku, (platform, dan) => {
         platform ??= '!'
         if (platform === 'Gamer') { platform = '#' + platform }
         platformMap[platform] = +(platformMap[platform] ?? 0) + 1
         if (platform[0] === '#') { return false }
         return true
       })
-      danmaku = truncateDanmaku(danmaku)
-      vm.danmaku = danmaku = Array.from(danmaku)
+      _danmaku = truncateDanmaku(_danmaku)
+      const danmaku = Array.from(_danmaku)
       const platforms = Object.entries(platformMap)
         .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}[${v}]`).join(',')
       vm.platforms = `(${platforms})`
-      vm.$emit('danmaku', danmaku)
+      vm.$emit('danmaku', vm.danmaku = danmaku)
       Message.success(`加载了 ${danmaku.length} 条弹幕 ${vm.platforms}`)
     },
     handleMatch() {
@@ -225,11 +221,11 @@ export default defineComponent({
       modalMatch(this)
     }
   },
-  render() {
+  render(_, cache) {
     const vm = this
-    return h(Cell, { title: `弹弹Play API[${vm.danmaku.length}] ${vm.platforms}` }, {
-      extra: () => h(ButtonGroup, null, () => [
-        h(Button, { onClick: vm.handleMatch }, () => '加载弹幕')
+    return h(Cell, { title: `弹弹Play API[${vm.danmaku.length}] ${vm.platforms}` }, cache[__LINE__] ??= {
+      extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => [
+        h(Button, { onClick: vm.handleMatch }, cache[__LINE__] ??= () => '加载弹幕')
       ])
     })
   }
