@@ -50,7 +50,7 @@ export default defineComponent({
       const { player, video } = this
       rate = +rate
       video.playbackRate = rate
-      player.notice(`倍速播放中 (${rate})`, rate === 1 ? 1 : 0, void 0, 'speed')
+      player.notice(`${rate} 倍速播放中`, rate === 1 ? 1 : 0, void 0, 'speed')
     }
   },
   mounted() {

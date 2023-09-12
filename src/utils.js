@@ -38,7 +38,16 @@ export const download = (href, filename = '') => {
 }
 
 const { apply } = Reflect
+const { getOwnPropertyDescriptor: getProp } = Object
+const { call: _call, bind: _bind } = Function.prototype
 const { addEventListener: _on, removeEventListener: _off } = EventTarget.prototype
+
+export const getString = apply(_bind, _call, [Object.prototype.toString])
+export const isPlainObject = (o) => {
+  o = getString(o)
+  return o === '[object Object]' || o === '[object Array]'
+}
+
 export const waitEvent = (target, type, options = !1) => new Promise((ok, reject) => {
   const done = e => {
     e.type === type ? ok(e) : reject(e)
@@ -60,6 +69,16 @@ export const beforeLoad = (type) => new Promise(ok => {
   apply(_on, target, a)
   apply(_on, target, b)
 })
+
+const { history } = window
+const HistoryPrototype = History.prototype
+const PopStateEventPrototype = PopStateEvent.prototype
+
+const _args = [history]
+export const pushState = apply(_bind, HistoryPrototype.pushState, _args)
+export const replaceState = apply(_bind, HistoryPrototype.replaceState, _args)
+export const getState = apply(_bind, getProp(HistoryPrototype, 'state').get, _args)
+export const getPopState = apply(_bind, _call, [getProp(PopStateEventPrototype, 'state').get])
 
 const noop = () => { }
 export class KeyboardHandler {

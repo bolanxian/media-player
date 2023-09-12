@@ -7,11 +7,14 @@ import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, S
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
 import { formatSize, KeyboardHandler } from '../utils'
+import { replaceState, pushState, getState, getPopState } from '../utils'
 import { gmxhr, fetch } from '../ddplay-api'
 import DropFile from './drop-file.vue'
 import PlayList from './play-list.vue'
 import DPlayerVue from './dplayer.vue'
 import DDPlayVue from './ddplay-api.vue'
+
+const { mediaSession: ms } = navigator
 
 const name = 'Media Player'
 export default defineComponent({
@@ -48,8 +51,18 @@ export default defineComponent({
     }
   },
   watch: {
-    title(title) {
-      document.title = (title ? title + ' - ' : '') + name
+    title: {
+      handler(title) {
+        if (title) {
+          document.title = `${title} - ${name}`
+          if (ms != null) { ms.metadata = new MediaMetadata({ title }) }
+          Message.info('加载: ' + title)
+        } else {
+          document.title = name
+        }
+      },
+      immediate: true,
+      flush: 'sync'
     }
   },
   methods: {
@@ -61,7 +74,7 @@ export default defineComponent({
         width: 600,
         render() {
           return h('div', null, [
-            h(CellGroup, null, [
+            h(CellGroup, null, () => [
               h(Cell, { title: '默认尺寸' }, {
                 extra: () => h(RadioGroup, {
                   type: 'button',
@@ -115,8 +128,14 @@ export default defineComponent({
       }
       this.player.play()
     },
-    loadVideoFromUrl(url, title) {
+    $_loadVideo(url) {
       const vm = this, { player } = vm, { video } = player
+      URL.revokeObjectURL(video.src)
+      video.src = url
+      return utils.waitEvent(video, 'canplay')
+    },
+    loadVideoFromUrl(url, title) {
+      const vm = this
       url = String(url)
       if (url.startsWith('web+player:')) {
         const $ = new URL(url).searchParams
@@ -124,13 +143,10 @@ export default defineComponent({
         title = $.get('title')
       }
       title ??= ''
-      URL.revokeObjectURL(video.src)
-      video.src = url
+      let canplay = vm.$_loadVideo(url, title)
+      const state = { title, url }
+      pushState(state, '', `#${new URLSearchParams(state)}`)
       vm.title = title; vm.file = null
-      Message.info('加载: ' + title)
-      const { mediaSession: ms } = navigator
-      if (ms != null) { ms.metadata = new MediaMetadata({ title }) }
-      let canplay = utils.waitEvent(video, 'canplay')
       if (/^https?:/.test(url)) {
         if (gmxhr != null) { canplay = canplay.catch(vm.loadVideoBackupGmxhr) }
       }
@@ -139,10 +155,13 @@ export default defineComponent({
     },
     loadVideoFromFile(file) {
       const vm = this
-      let src = URL.createObjectURL(file)
-      let name = (file.name ?? '').replace(/\.[^.]+$/, '')
-      const canplay = vm.loadVideoFromUrl(src, name)
-      vm.file = file
+      let url = URL.createObjectURL(file)
+      let title = (file.name ?? '').replace(/\.[^.]+$/, '')
+      const canplay = vm.$_loadVideo(url, title)
+      const state = { title }, setState = vm.file == null ? pushState : replaceState
+      setState(state, '', `#${new URLSearchParams(state)}`)
+      vm.title = title; vm.file = file
+      vm.canplay = canplay
       return canplay
     },
     loadVideoBackupGmxhr(e) {
@@ -159,7 +178,7 @@ export default defineComponent({
           gmxhr({
             url: src, responseType: 'blob',
             onload(e) {
-              vm.loadVideoFromUrl(URL.createObjectURL(e.response), title).then(() => {
+              vm.$_loadVideo(URL.createObjectURL(e.response), title).then(() => {
                 dp.notice('使用 GM_xmlhttpRequest 加载成功', void 0, void 0, 'gmxhr')
               })
             },
@@ -226,20 +245,47 @@ export default defineComponent({
       })
       vm.viewer = viewer
       viewer.show()
-    },
-    handlePopstate(e) {
-      let { hash } = location
-      if (!hash) { return }
-      hash = hash.slice(1)
-      let params = new URLSearchParams(hash)
-      let url = params.get('.') ?? `web+player:?${hash}`
-      this.$refs.input.currentValue = url
-      this.loadVideoFromUrl(url)
     }
   },
   mounted() {
-    const vm = this, { keybord } = vm, { signal } = vm.aborter
-    nextTick(vm.handlePopstate)
+    const vm = this
+    nextTick().then(() => {
+      try {
+        let state = getState(), params
+        if (state == null) {
+          let { hash } = location
+          if (hash) {
+            hash = hash.slice(1)
+            params = new URLSearchParams(hash)
+            let url = params.get('.')
+            if (url != null) { params = new URL(url).searchParams }
+            const src = params.get('url')
+            if (src != null) {
+              state = { title: params.get('title'), url: src }
+              replaceState(state, '', `#${params}`)
+            }
+          }
+        }
+      } finally {
+        const handlePopstate = e => {
+          const state = e != null ? getPopState(e) : getState()
+          if (state != null) {
+            const { url, title } = state
+            if (url != null) {
+              vm.$refs.input.currentValue = url
+              vm.$_loadVideo(url, title)
+              vm.title = title
+              return
+            }
+          }
+          vm.title = ''
+          replaceState(null, '', '#')
+        }
+        window.addEventListener('popstate', handlePopstate, { capture: true, signal })
+        handlePopstate()
+      }
+    })
+    const { keybord } = vm, { signal } = vm.aborter
     keybord.set(' ', null, vm.playpause)
     keybord.set('ArrowUp', () => vm.relativeVolume(0.1))
     keybord.set('ArrowDown', () => vm.relativeVolume(-0.1))
@@ -252,7 +298,6 @@ export default defineComponent({
       if (repeat > 0) { vm.player.speed(1); return }
       vm.relativeSeek(5)
     })
-    window.addEventListener('popstate', vm.handlePopstate, { capture: true, signal })
     let isPaused = false
     document.addEventListener('visibilitychange', (e) => {
       const { visiblePause } = vm.playerOptions.visiblePause
@@ -272,7 +317,7 @@ export default defineComponent({
       const dur = vm.player.video.duration
       if (dur === dur) { e.preventDefault() }
     }, { capture: true, signal })
-    const { mediaSession: ms } = navigator
+
     if (ms != null) {
       ms.setActionHandler('seekbackward', () => vm.relativeSeek(-5))
       ms.setActionHandler('seekforward', () => vm.relativeSeek(5))
@@ -285,11 +330,10 @@ export default defineComponent({
         ms.setActionHandler('nexttrack', null)
       })
     }
-    document.title = name
   },
   beforeUnmount() {
     this.aborter.abort()
-    document.title = name
+    this.title = ''
   },
   render(_, cache, props, setup, data, ctx) {
     const vm = this, size = vm.size.split('*')
@@ -329,9 +373,7 @@ export default defineComponent({
                 h(Cell, { title: '快进快退' }, cache[__LINE__] ??= {
                   extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => Array.from(vm.relativeSeeks, (seek) => {
                     const { value, slot } = (typeof seek == 'number' ? { value: seek, slot: String(seek) } : seek)
-                    return h(Button, {
-                      onClick() { vm.relativeSeek(value) }
-                    }, () => slot)
+                    return h(Button, { onClick() { vm.relativeSeek(value) } }, () => slot)
                   }))
                 }),
                 h(DDPlayVue, {

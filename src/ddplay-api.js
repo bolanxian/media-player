@@ -1,6 +1,6 @@
 
 import { createMD5 } from './hash-stream'
-
+import { isPlainObject } from './utils'
 //https://api.dandanplay.net/swagger
 let apiHost = 'api.dandanplay.net'
 export let apiBase = `https://${apiHost}/`
@@ -9,6 +9,7 @@ export const hosts = [
   'cas.dandanplay.net'
 ]
 export const episodeTypes = Object.freeze({
+  __proto__: null,
   tvseries: 'TV动画',
   tvspecial: 'TV特别',
   ova: 'OVA',
@@ -24,9 +25,7 @@ export const setApiBase = _ => { apiBase = _ }
 export let gmxhr, fetch
 export const setGmxhr = _ => { gmxhr = _ }
 export const setFetch = _ => { fetch = _ }
-const { toString } = Object.prototype
-const plainObjects = new Set(['[object Object]', '[object Array]'])
-const isPlainObject = (data) => plainObjects.has(toString.call(data))
+
 export const danFetch = async (url, requestData, init = {}) => {
   url = new URL(url, apiBase).href
   if (requestData != null) {

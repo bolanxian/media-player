@@ -12,12 +12,12 @@
   "dependencies": {
     "dplayer": "^1.27.1",
     "hash-wasm": "^4.9.0",
-    "view-ui-plus": "^1.3.12",
-    "viewerjs": "^1.11.3",
+    "view-ui-plus": "^1.3.14",
+    "viewerjs": "^1.11.5",
     "vue": "^3.2.47"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^4.2.2",
-    "vite": "^4.3.5"
+    "@vitejs/plugin-vue": "^4.3.4",
+    "vite": "^4.4.9"
   }
 }
