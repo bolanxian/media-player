@@ -1,9 +1,11 @@
 
 import { createMD5 } from './hash-stream'
-import { isPlainObject } from './utils'
+import { gmxhr, fetch, isPlainObject } from './utils'
+export { gmxhr, fetch }
 //https://api.dandanplay.net/swagger
 let apiHost = 'api.dandanplay.net'
 export let apiBase = `https://${apiHost}/`
+export const setApiBase = _ => { apiBase = _ }
 export const hosts = [
   apiHost,
   'cas.dandanplay.net'
@@ -21,10 +23,6 @@ export const episodeTypes = Object.freeze({
   jpdrama: '日本电视剧',
   unknown: '未知'
 })
-export const setApiBase = _ => { apiBase = _ }
-export let gmxhr, fetch
-export const setGmxhr = _ => { gmxhr = _ }
-export const setFetch = _ => { fetch = _ }
 
 export const danFetch = async (url, requestData, init = {}) => {
   url = new URL(url, apiBase).href

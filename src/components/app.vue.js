@@ -2,12 +2,12 @@
 /**
  * @createDate 2019-8-25 15:01:48
 */
-import { defineComponent, nextTick, createVNode as h, shallowRef as sr, shallowReactive, onMounted, onUnmounted } from 'vue'
+import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive } from 'vue'
 import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Divider } from 'view-ui-plus'
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
-import { formatSize, KeyboardHandler } from '../utils'
-import { replaceState, pushState, getState, getPopState } from '../utils'
+import { on, startsWith, setTitle, getSignal, formatSize } from '../utils'
+import { pushState, replaceState, getState, getPopState } from '../utils'
 import { gmxhr, fetch } from '../ddplay-api'
 import DropFile from './drop-file.vue'
 import PlayList from './play-list.vue'
@@ -36,7 +36,7 @@ export default defineComponent({
       ],
       imageType: 'image/png',
       viewer: null,
-      keybord: new KeyboardHandler(document, aborter.signal),
+      keyboard: new utils.KeyboardHandler(document, getSignal(aborter)),
       playList: sr(null),
       player: sr(null)
     }
@@ -47,18 +47,18 @@ export default defineComponent({
       size: sizes[playerOptions.size] ?? sizes[1],
       list: [],
       file: null,
-      title: ''
+      title: null
     }
   },
   watch: {
     title: {
       handler(title) {
         if (title) {
-          document.title = `${title} - ${name}`
+          setTitle(`${title} - ${name}`)
           if (ms != null) { ms.metadata = new MediaMetadata({ title }) }
-          Message.info('加载: ' + title)
+          setTimeout(Message.message, 0, 'info', '加载: ' + title)
         } else {
-          document.title = name
+          setTitle(name)
         }
       },
       immediate: true,
@@ -69,6 +69,7 @@ export default defineComponent({
     options() {
       const vm = this, { sizes } = vm
       const opts = shallowReactive(vm.playerOptions)
+      const redirector = shallowReactive({ loading: false, disabled: false })
       Modal.confirm({
         title: '设置',
         width: 600,
@@ -89,23 +90,40 @@ export default defineComponent({
                 })
               }),
               h(Cell, { title: '油猴脚本' }, {
-                extra: () => h(Button, {
-                  type: 'button',
-                  onClick() {
-                    const srcipt = utils.createUserScript()
-                    const a = document.createElement('a')
-                    a.href = URL.createObjectURL(new Blob([srcipt], { type: 'text/plain' }))
-                    a.target = '_blank'
-                    a.click()
-                  }
-                }, () => 'GM_fetch')
+                extra: () => h(ButtonGroup, null, () => [
+                  gmxhr == null ? null : h(Button, {
+                    type: 'button',
+                    loading: redirector.loading,
+                    disabled: redirector.disabled,
+                    async onClick() {
+                      try {
+                        redirector.loading = true
+                        const srcipt = await utils.createRedirector()
+                        const url = URL.createObjectURL(new Blob([srcipt], { type: 'text/plain' }))
+                        utils.download(url)
+                        redirector.loading = false
+                      } catch (e) {
+                        redirector.disabled = true
+                        throw e
+                      }
+                    }
+                  }, () => utils.redirectorName),
+                  h(Button, {
+                    type: 'button',
+                    onClick() {
+                      const srcipt = utils.createUserScript()
+                      const url = URL.createObjectURL(new Blob([srcipt], { type: 'text/plain' }))
+                      utils.download(url)
+                    }
+                  }, () => 'GM_fetch')
+                ])
               }),
               h(Cell, { title: 'web+player: 协议处理器' }, {
                 extra: () => h(Button, {
                   type: 'button',
                   onClick() {
                     const href = new URL(location.pathname, location.href).href
-                    navigator.registerProtocolHandler('web+player', `${href}#.=%s`)
+                    navigator.registerProtocolHandler('web+player', `${href}#!%s`)
                   }
                 }, () => '注册')
               })
@@ -136,17 +154,16 @@ export default defineComponent({
     },
     loadVideoFromUrl(url, title) {
       const vm = this
-      url = String(url)
-      if (url.startsWith('web+player:')) {
+      if (startsWith(url, 'web+player:')) {
         const $ = new URL(url).searchParams
         url = $.get('url')
         title = $.get('title')
       }
+      url = String(url)
       title ??= ''
       let canplay = vm.$_loadVideo(url, title)
       const state = { title, url }
-      pushState(state, '', `#${new URLSearchParams(state)}`)
-      vm.title = title; vm.file = null
+      pushState(state); vm.title = title; vm.file = null
       if (/^https?:/.test(url)) {
         if (gmxhr != null) { canplay = canplay.catch(vm.loadVideoBackupGmxhr) }
       }
@@ -159,8 +176,7 @@ export default defineComponent({
       let title = (file.name ?? '').replace(/\.[^.]+$/, '')
       const canplay = vm.$_loadVideo(url, title)
       const state = { title }, setState = vm.file == null ? pushState : replaceState
-      setState(state, '', `#${new URLSearchParams(state)}`)
-      vm.title = title; vm.file = file
+      setState(state); vm.title = title; vm.file = file
       vm.canplay = canplay
       return canplay
     },
@@ -248,58 +264,44 @@ export default defineComponent({
     }
   },
   mounted() {
-    const vm = this
-    nextTick().then(() => {
+    const vm = this, signal = getSignal(vm.aborter)
+    const handlePopstate = e => {
+      let state = e != null ? getPopState(e) : getState()
       try {
-        let state = getState(), params
-        if (state == null) {
-          let { hash } = location
-          if (hash) {
-            hash = hash.slice(1)
-            params = new URLSearchParams(hash)
-            let url = params.get('.')
-            if (url != null) { params = new URL(url).searchParams }
-            const src = params.get('url')
-            if (src != null) {
-              state = { title: params.get('title'), url: src }
-              replaceState(state, '', `#${params}`)
-            }
-          }
-        }
+        if (state == null) { state = utils.buildState() }
       } finally {
-        const handlePopstate = e => {
-          const state = e != null ? getPopState(e) : getState()
-          if (state != null) {
-            const { url, title } = state
-            if (url != null) {
-              vm.$refs.input.currentValue = url
-              vm.$_loadVideo(url, title)
-              vm.title = title
-              return
-            }
+        if (state != null) {
+          const { title, url } = state
+          if (url != null) {
+            vm.$refs.input.currentValue = url
+            vm.$_loadVideo(url, title)
+            vm.title = title
+          } else {
+            replaceState(null)
+            vm.title = ''
           }
-          vm.title = ''
-          replaceState(null, '', '#')
+          return
         }
-        window.addEventListener('popstate', handlePopstate, { capture: true, signal })
-        handlePopstate()
+        vm.title = ''
       }
-    })
-    const { keybord } = vm, { signal } = vm.aborter
-    keybord.set(' ', null, vm.playpause)
-    keybord.set('ArrowUp', () => vm.relativeVolume(0.1))
-    keybord.set('ArrowDown', () => vm.relativeVolume(-0.1))
-    keybord.set('PageUp', vm.prev)
-    keybord.set('PageDown', vm.next)
-    keybord.set('ArrowLeft', null, () => vm.relativeSeek(-5))
-    keybord.set('ArrowRight', (e, repeat) => {
+    }
+    on(window, 'popstate', handlePopstate, { capture: true, signal })
+    handlePopstate()
+    const { keyboard } = vm
+    keyboard.set(' ', null, vm.playpause)
+    keyboard.set('ArrowUp', () => vm.relativeVolume(0.1))
+    keyboard.set('ArrowDown', () => vm.relativeVolume(-0.1))
+    keyboard.set('PageUp', vm.prev)
+    keyboard.set('PageDown', vm.next)
+    keyboard.set('ArrowLeft', null, () => vm.relativeSeek(-5))
+    keyboard.set('ArrowRight', (e, repeat) => {
       if (repeat === 1) { vm.player.speed(3) }
     }, (e, repeat) => {
       if (repeat > 0) { vm.player.speed(1); return }
       vm.relativeSeek(5)
     })
     let isPaused = false
-    document.addEventListener('visibilitychange', (e) => {
+    on(document, 'visibilitychange', (e) => {
       const { visiblePause } = vm.playerOptions.visiblePause
       switch (e.target.visibilityState) {
         case 'visible':
@@ -313,7 +315,7 @@ export default defineComponent({
           break
       }
     }, { signal })
-    window.addEventListener('beforeunload', e => {
+    on(window, 'beforeunload', e => {
       const dur = vm.player.video.duration
       if (dur === dur) { e.preventDefault() }
     }, { capture: true, signal })
@@ -323,7 +325,7 @@ export default defineComponent({
       ms.setActionHandler('seekforward', () => vm.relativeSeek(5))
       ms.setActionHandler('previoustrack', vm.prev)
       ms.setActionHandler('nexttrack', vm.next)
-      signal.addEventListener('abort', e => {
+      on(signal, 'abort', e => {
         ms.setActionHandler('seekbackward', null)
         ms.setActionHandler('seekforward', null)
         ms.setActionHandler('previoustrack', null)
@@ -332,8 +334,8 @@ export default defineComponent({
     }
   },
   beforeUnmount() {
-    this.aborter.abort()
-    this.title = ''
+    abort(this.aborter)
+    this.title = null
   },
   render(_, cache, props, setup, data, ctx) {
     const vm = this, size = vm.size.split('*')

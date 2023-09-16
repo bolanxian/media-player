@@ -1,16 +1,14 @@
 
 import { createApp } from 'vue'
 import App from './components/app.vue'
-import { setGmxhr, setFetch } from './ddplay-api'
-import { beforeLoad } from './utils'
+import { setGmxhr, setFetch, beforeLoad } from './utils'
 
 const app = createApp(App)
-beforeLoad('external:tampermonkey:grant').then(e => {
-  const _ = e?.detail
-  if (_ != null) {
-    setGmxhr(_.GM_xmlhttpRequest)
-    setFetch(_.GM_fetch)
-  }
-  const vm = app.mount('#app')
-  window._vm = vm
-})
+const grantEvent = await beforeLoad('external:tampermonkey:grant')
+const grant = grantEvent?.detail
+if (grant != null) {
+  setGmxhr(grant.GM_xmlhttpRequest)
+  setFetch(grant.GM_fetch)
+}
+const vm = app.mount('#app')
+window._vm = vm
