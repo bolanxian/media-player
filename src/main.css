@@ -38,6 +38,23 @@ body {
   z-index: 1;
 }
 
+@keyframes loading-bar-inner-inner {
+  0% {
+    left: -12px;
+  }
+
+  100% {
+    left: calc(100% + 12px);
+  }
+}
+
+.ivu-loading-bar-inner>.ivu-loading-bar-inner {
+  position: absolute;
+  background: #FFF;
+  width: 12px;
+  animation: loading-bar-inner-inner 5s cubic-bezier(.55, .06, .68, .19) infinite;
+}
+
 .dplayer {
   width: var(--dplayer-width, 960px);
   height: calc(var(--dplayer-height, 540px) + 41px);

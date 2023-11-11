@@ -1,7 +1,8 @@
 
 import { createMD5 } from './hash-stream'
-import { gmxhr, fetch, isPlainObject } from './utils'
-export { gmxhr, fetch }
+import { isPlainObject } from './bind'
+import { gmxhr, fetch } from './utils'
+
 //https://api.dandanplay.net/swagger
 let apiHost = 'api.dandanplay.net'
 export let apiBase = `https://${apiHost}/`

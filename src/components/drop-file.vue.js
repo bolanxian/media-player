@@ -1,6 +1,7 @@
 
 import { defineComponent, createVNode as h, shallowRef as sr, createCommentVNode } from 'vue'
 import { Icon } from 'view-ui-plus'
+import { on, off, document } from '../bind'
 const { isArray } = Array
 
 export const DropGlobal = defineComponent({
@@ -14,12 +15,12 @@ export const DropGlobal = defineComponent({
     }
   },
   beforeMount() {
-    document.addEventListener('dragover', this.handle)
-    document.addEventListener('drop', this.handle)
+    on(document, 'dragover', this.handle)
+    on(document, 'drop', this.handle)
   },
   beforeUnmount() {
-    document.removeEventListener('dragover', this.handle)
-    document.removeEventListener('drop', this.handle)
+    off(document, 'dragover', this.handle)
+    off(document, 'drop', this.handle)
   },
   render() {
     return createCommentVNode('global')
@@ -43,10 +44,9 @@ export default defineComponent({
   },
   methods: {
     handleClick(e) {
-      if (e.target !== this.file) {
-        this.file.click()
-        e.preventDefault()
-      }
+      this.file.click()
+      e.target.blur()
+      e.preventDefault()
       e.stopPropagation()
     },
     handleChange(e) {
@@ -77,8 +77,7 @@ export default defineComponent({
     return h('div', {
       class: 'ivu-upload ivu-upload-drag',
       onDragover: vm.handleDragover,
-      onDrop: vm.handleDrop,
-      onClick: vm.handleClick
+      onDrop: vm.handleDrop
     }, [
       vm.global ? h(DropGlobal, {
         onDragover: vm.handleDragover,
@@ -101,7 +100,8 @@ export default defineComponent({
           opacity: '0'
         },
         onCopy: vm.handleDragover,
-        onPaste: vm.handleDrop
+        onPaste: vm.handleDrop,
+        onClick: vm.handleClick
       }),
       slot != null ? slot() : [
         h('div', { class: 'ivu-card-head', style: 'text-align: left' }, [

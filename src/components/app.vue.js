@@ -2,22 +2,30 @@
 /**
  * @createDate 2019-8-25 15:01:48
 */
-import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive } from 'vue'
+import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount } from 'vue'
 import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Divider } from 'view-ui-plus'
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
-import { on, startsWith, setTitle, getSignal, formatSize } from '../utils'
-import { pushState, replaceState, getState, getPopState } from '../utils'
-import { gmxhr, fetch } from '../ddplay-api'
+import { gmxhr, formatSize, download } from '../utils'
+import { nextTick, noop, bind, $string, on, document, setTitle } from '../bind'
+import { createAborter, onAbort } from '../aborter'
+import { KeyboardHandler } from '../keyboard'
+import { getState, getPopState, pushState, replaceState, buildState } from '../history'
+import *  as external from '../external'
 import DropFile from './drop-file.vue'
 import PlayList from './play-list.vue'
 import DPlayerVue from './dplayer.vue'
 import DDPlayVue from './ddplay-api.vue'
 
-const { mediaSession: ms } = navigator
+const { startsWith } = $string
+const { mediaSession } = navigator
+let setActionHandler = noop
+if (typeof MediaSession === 'function') {
+  setActionHandler = bind(MediaSession.prototype.setActionHandler, mediaSession)
+}
 
 const name = 'Media Player'
-export default defineComponent({
+export const App = defineComponent({
   name,
   setup(props) {
     const opts = {
@@ -25,9 +33,10 @@ export default defineComponent({
       visiblePause: false
     }
     try { Object.assign(opts, JSON.parse(localStorage.getItem('player-options'))) } catch (e) { }
-    const aborter = new AbortController()
+    const { abort, signal } = createAborter()
+    onBeforeUnmount(abort)
     return {
-      aborter,
+      signal,
       playerOptions: opts,
       globalKeydownMap: new Map(),
       sizes: ['960*0', '960*540', '1280*720'],
@@ -36,7 +45,7 @@ export default defineComponent({
       ],
       imageType: 'image/png',
       viewer: null,
-      keyboard: new utils.KeyboardHandler(document, getSignal(aborter)),
+      keyboard: new KeyboardHandler(document, signal),
       playList: sr(null),
       player: sr(null)
     }
@@ -55,7 +64,7 @@ export default defineComponent({
       handler(title) {
         if (title) {
           setTitle(`${title} - ${name}`)
-          if (ms != null) { ms.metadata = new MediaMetadata({ title }) }
+          if (mediaSession != null) { mediaSession.metadata = new MediaMetadata({ title }) }
           setTimeout(Message.message, 0, 'info', '加载: ' + title)
         } else {
           setTitle(name)
@@ -98,22 +107,22 @@ export default defineComponent({
                     async onClick() {
                       try {
                         redirector.loading = true
-                        const srcipt = await utils.createRedirector()
+                        const srcipt = await external.createRedirector()
                         const url = URL.createObjectURL(new Blob([srcipt], { type: 'text/plain' }))
-                        utils.download(url)
+                        download(url)
                         redirector.loading = false
                       } catch (e) {
                         redirector.disabled = true
                         throw e
                       }
                     }
-                  }, () => utils.redirectorName),
+                  }, () => external.redirectorName),
                   h(Button, {
                     type: 'button',
                     onClick() {
-                      const srcipt = utils.createUserScript()
+                      const srcipt = external.createUserScript()
                       const url = URL.createObjectURL(new Blob([srcipt], { type: 'text/plain' }))
-                      utils.download(url)
+                      download(url)
                     }
                   }, () => 'GM_fetch')
                 ])
@@ -249,7 +258,7 @@ export default defineComponent({
     },
     saveImage() {
       const { image } = this.$refs, { src } = image
-      src && utils.download(src, image.dataset.filename)
+      src && download(src, image.dataset.filename)
     },
     showImage() {
       const vm = this
@@ -264,29 +273,29 @@ export default defineComponent({
     }
   },
   mounted() {
-    const vm = this, signal = getSignal(vm.aborter)
+    const vm = this, { signal } = vm
     const handlePopstate = e => {
       let state = e != null ? getPopState(e) : getState()
       try {
-        if (state == null) { state = utils.buildState() }
+        if (state == null) { state = buildState() }
       } finally {
-        if (state != null) {
-          const { title, url } = state
-          if (url != null) {
-            vm.$refs.input.currentValue = url
-            vm.$_loadVideo(url, title)
-            vm.title = title
-          } else {
-            replaceState(null)
-            vm.title = ''
-          }
+        if (state == null) {
+          vm.title = ''
           return
         }
-        vm.title = ''
+        const { title, url } = state
+        if (url != null) {
+          vm.$refs.input.currentValue = url
+          vm.$_loadVideo(url, title)
+          vm.title = title
+        } else {
+          replaceState(null)
+          vm.title = ''
+        }
       }
     }
     on(window, 'popstate', handlePopstate, { capture: true, signal })
-    handlePopstate()
+    nextTick(handlePopstate)
     const { keyboard } = vm
     keyboard.set(' ', null, vm.playpause)
     keyboard.set('ArrowUp', () => vm.relativeVolume(0.1))
@@ -320,21 +329,20 @@ export default defineComponent({
       if (dur === dur) { e.preventDefault() }
     }, { capture: true, signal })
 
-    if (ms != null) {
-      ms.setActionHandler('seekbackward', () => vm.relativeSeek(-5))
-      ms.setActionHandler('seekforward', () => vm.relativeSeek(5))
-      ms.setActionHandler('previoustrack', vm.prev)
-      ms.setActionHandler('nexttrack', vm.next)
-      on(signal, 'abort', e => {
-        ms.setActionHandler('seekbackward', null)
-        ms.setActionHandler('seekforward', null)
-        ms.setActionHandler('previoustrack', null)
-        ms.setActionHandler('nexttrack', null)
+    if (mediaSession != null) {
+      setActionHandler('seekbackward', () => vm.relativeSeek(-5))
+      setActionHandler('seekforward', () => vm.relativeSeek(5))
+      setActionHandler('previoustrack', vm.prev)
+      setActionHandler('nexttrack', vm.next)
+      onAbort(signal, (reason) => {
+        setActionHandler('seekbackward', null)
+        setActionHandler('seekforward', null)
+        setActionHandler('previoustrack', null)
+        setActionHandler('nexttrack', null)
       })
     }
   },
   beforeUnmount() {
-    abort(this.aborter)
     this.title = null
   },
   render(_, cache, props, setup, data, ctx) {

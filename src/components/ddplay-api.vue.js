@@ -1,7 +1,8 @@
 
 import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, watch, getCurrentInstance } from 'vue'
 import { Message, Modal, Card, CellGroup, Cell, Input, ButtonGroup, Button } from 'view-ui-plus'
-import { episodeTypes, fetch, match, commentURL, comment } from '../ddplay-api'
+import { episodeTypes, match, commentURL, comment } from '../ddplay-api'
+import { fetch } from '../utils'
 const { isArray } = Array
 
 function* convertDanmakuToDplayer(comments, offset = 0) {

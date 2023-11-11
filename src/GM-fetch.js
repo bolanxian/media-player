@@ -15,13 +15,14 @@
   const { getOwnPropertyDescriptor: getProp, getOwnPropertyDescriptors: getProps } = Object
   const { fromEntries, defineProperties: defProps } = Object
   const { bind: _bind, call: _call } = Function.prototype
-  const { addEventListener: _on } = EventTarget.prototype
+  const evtProto = EventTarget.prototype
   const signalProto = AbortSignal.prototype, { throwIfAborted: _throwIf } = signalProto
 
-  const on = apply(_bind, _call, [_on]), _options = { once: true }
-  const getAborted = apply(_bind, _call, [getProp(signalProto, 'aborted').get])
-  const getReason = apply(_bind, _call, [getProp(signalProto, 'reason').get])
-  const throwIfAborted = _throwIf != null ? apply(_bind, _call, [_throwIf]) : (signal) => {
+  const bindCall = apply(_bind, _bind, [_call])
+  const on = bindCall(evtProto.addEventListener), _options = { once: true }
+  const getAborted = bindCall(getProp(signalProto, 'aborted').get)
+  const getReason = bindCall(getProp(signalProto, 'reason').get)
+  const throwIfAborted = _throwIf != null ? bindCall(_throwIf) : (signal) => {
     if (getAborted(signal)) { throw getReason(signal) }
   }
 
