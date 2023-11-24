@@ -1,5 +1,5 @@
 
-import { $number, $string, $array, on, off, getReadyState } from './bind'
+import { nextTick, $number, $string, $array, on, off, document, getReadyState } from './bind'
 
 export let gmxhr, fetch
 export const setGrant = (grant) => {
@@ -68,3 +68,7 @@ export const beforeLoad = (type) => new Promise(ok => {
   on(target, type, done, options)
   on(target, 'load', done, options)
 })
+export const onLoad = (fn) => {
+  if (getReadyState() === 'complete') { return nextTick(fn) }
+  on(window, 'load', fn, { once: true })
+}

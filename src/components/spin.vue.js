@@ -45,10 +45,10 @@ export const Bar = defineComponent({
     error: { type: Boolean, default: false },
   },
   setup(props) {
-    let render
+    let render, inner
     return () => h(Transition, { name: 'fade' }, render ??= () => {
       const { loading, error } = props
-      return (loading || error) ? h('div', { class: $bar, style }, [
+      return (loading || error) ? h('div', { class: `${$bar} ${$bar}--spinner`, style }, [
         h('div', {
           class: {
             [`${$bar}-inner`]: true,
@@ -56,7 +56,7 @@ export const Bar = defineComponent({
             [`${$bar}-inner-failed-color-error`]: error
           },
           style
-        }, loading ? Array.from({ length: 5 }, (_, i) => {
+        }, loading ? inner ??= Array.from({ length: 5 }, (_, i) => {
           return h('div', {
             class: `${$bar}-inner`,
             style: `${style};animation-delay:${-i}s`

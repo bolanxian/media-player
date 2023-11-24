@@ -49,7 +49,7 @@ export const $number = createBinder(Number.prototype)
 export const $string = createBinder(String.prototype)
 export const $array = createBinder(Array.prototype)
 
-export const { fromEntries, getOwnPropertyDescriptor: getPropDesc } = Object
+export const { fromEntries, getOwnPropertyDescriptor: getPropDesc, freeze } = Object
 const ObjectProto = Object.prototype
 export const hasOwn = Object.hasOwn ?? bindCall(ObjectProto.hasOwnProperty)
 export const getTypeString = bindCall(ObjectProto.toString)
@@ -57,6 +57,8 @@ export const isPlainObject = (o) => {
   o = getTypeString(o)
   return o === '[object Object]' || o === '[object Array]'
 }
+
+export const empty = freeze([])
 
 const EventTargetProto = EventTarget.prototype
 export const on = bindCall(EventTargetProto.addEventListener)

@@ -1,5 +1,5 @@
 
-import { createApp, shallowRef as sr, onMounted, createVNode as h } from 'vue'
+import { createApp, shallowRef as sr, createVNode as h, onMounted, onErrorCaptured } from 'vue'
 import { Spin, Bar } from './components/spin.vue?spin-img'
 import { setGrant, beforeLoad } from './utils'
 const { isNaN } = Number
@@ -9,7 +9,7 @@ const AppPromise = import('./components/app.vue')
 createApp({
   setup() {
     const show = sr(0)
-    let App
+    let App, vm
     onMounted(async () => {
       try {
         App = (await AppPromise).App
@@ -21,7 +21,10 @@ createApp({
         throw e
       }
     })
-    const props = { ref(vm) { window._vm = vm }, show }
+    onErrorCaptured((error, inst, info) => {
+      if (vm === inst) { show.value = 0 / 0 }
+    })
+    const props = { ref(_) { window._vm = vm = _ }, show }
     return () => {
       const $show = show.value
       const loading = $show <= 1, error = isNaN($show)

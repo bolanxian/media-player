@@ -98,10 +98,10 @@ export const version = pkg.version`
       enforce: 'pre',
       transform(code, id) {
         if (id.endsWith('?spin-img')) {
-          code = code.replace(/(?<=\/\*<base64>\*\/`)[\s\S]*?(?=`\/\*<\/base64>\*\/)/g, m => {
+          code = code.replace(/\/\*<base64>\*\/`([\s\S]*?)`\/\*<\/base64>\*\//g, (_, m) => {
             m = m.replace(/\s*\n\s*/g, '')
             m = `data:image/svg+xml;base64,${Buffer.from(m, 'utf-8').toString('base64')}`
-            return m
+            return JSON.stringify(m)
           })
           return code
         }

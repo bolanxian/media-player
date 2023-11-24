@@ -2,21 +2,23 @@
 /**
  * @createDate 2019-8-25 15:01:48
 */
-import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount } from 'vue'
+import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, createApp, onBeforeUnmount } from 'vue'
 import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Divider } from 'view-ui-plus'
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
 import { gmxhr, formatSize, download } from '../utils'
-import { nextTick, noop, bind, $string, on, document, setTitle } from '../bind'
+import { noop, bind, $number, $string, on, document, setTitle } from '../bind'
 import { createAborter, onAbort } from '../aborter'
 import { KeyboardHandler } from '../keyboard'
 import { getState, getPopState, pushState, replaceState, buildState } from '../history'
 import *  as external from '../external'
+import BarVue from './bar.vue'
 import DropFile from './drop-file.vue'
 import PlayList from './play-list.vue'
 import DPlayerVue from './dplayer.vue'
 import DDPlayVue from './ddplay-api.vue'
 
+const { toFixed } = $number
 const { startsWith } = $string
 const { mediaSession } = navigator
 let setActionHandler = noop
@@ -38,7 +40,6 @@ export const App = defineComponent({
     return {
       signal,
       playerOptions: opts,
-      globalKeydownMap: new Map(),
       sizes: ['960*0', '960*540', '1280*720'],
       relativeSeeks: [
         -95, -10, -5, { value: -1 / 30, slot: '-1帧' }, { value: 1 / 30, slot: '1帧' }, 5, 10, 85
@@ -213,7 +214,7 @@ export const App = defineComponent({
             onprogress({ loaded, total, lengthComputable }) {
               dp.notice(
                 lengthComputable
-                  ? `${formatSize(loaded)}/${formatSize(total)}(${(100 * loaded / total).toFixed(2)}%)`
+                  ? `${formatSize(loaded)}/${formatSize(total)}(${toFixed(100 * loaded / total, 2)}%)`
                   : `${formatSize(loaded)}/unknow`,
                 0, void 0, 'gmxhr'
               )
@@ -294,8 +295,10 @@ export const App = defineComponent({
         }
       }
     }
-    on(window, 'popstate', handlePopstate, { capture: true, signal })
-    nextTick(handlePopstate)
+    utils.onLoad(() => {
+      on(window, 'popstate', handlePopstate, { capture: true, signal })
+      handlePopstate()
+    })
     const { keyboard } = vm
     keyboard.set(' ', null, vm.playpause)
     keyboard.set('ArrowUp', () => vm.relativeVolume(0.1))
@@ -311,7 +314,7 @@ export const App = defineComponent({
     })
     let isPaused = false
     on(document, 'visibilitychange', (e) => {
-      const { visiblePause } = vm.playerOptions.visiblePause
+      const { visiblePause } = vm.playerOptions
       switch (e.target.visibilityState) {
         case 'visible':
           if (visiblePause && isPaused) { vm.player.play() }
@@ -328,6 +331,12 @@ export const App = defineComponent({
       const dur = vm.player.video.duration
       if (dur === dur) { e.preventDefault() }
     }, { capture: true, signal })
+
+    const barInst = createApp(BarVue, { video: vm.player.video })
+    const barContainer = document.createElement('div')
+    barInst.mount(barContainer)
+    document.body.append(barContainer)
+    onAbort(signal, barInst.unmount)
 
     if (mediaSession != null) {
       setActionHandler('seekbackward', () => vm.relativeSeek(-5))
@@ -348,8 +357,8 @@ export const App = defineComponent({
   render(_, cache, props, setup, data, ctx) {
     const vm = this, size = vm.size.split('*')
     return [
-      h('div', { class: 'container' }, [
-        h(Row, { gutter: 5 }, cache[__LINE__] ??= () => [
+      h('div', { class: 'container', style: 'margin-top: 6px' }, [
+        h(Row, { gutter: 6 }, cache[__LINE__] ??= () => [
           h(Col, { span: 12 }, cache[__LINE__] ??= () => [
             h(Input, {
               ref: 'input',
@@ -406,9 +415,11 @@ export const App = defineComponent({
       h(Divider, { style: 'margin: 10px 0' }),
       h(DPlayerVue, { ref: 'player', width: +size[0], height: +size[1] }),
       h(Divider, { style: 'margin: 10px 0' }),
-      h(Card, { style: 'margin: 10px; width: 234px' }, cache[__LINE__] ??= () => h('img', {
-        ref: 'image', style: 'width: 100%', onClick: vm.showImage
-      }))
+      h('div', { class: 'container', style: 'margin-bottom: 24px' }, [
+        h(Card, { style: 'width: 274px' }, cache[__LINE__] ??= () => h('img', {
+          ref: 'image', style: 'width: 100%', onClick: vm.showImage
+        }))
+      ])
     ]
   }
 })
