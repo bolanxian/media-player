@@ -2,8 +2,8 @@
 /**
  * @createDate 2019-8-25 15:01:48
 */
-import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, createApp, onBeforeUnmount } from 'vue'
-import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Divider } from 'view-ui-plus'
+import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount } from 'vue'
+import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal } from 'view-ui-plus'
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
 import { gmxhr, formatSize, download } from '../utils'
@@ -300,6 +300,7 @@ export const App = defineComponent({
       handlePopstate()
     })
     const { keyboard } = vm
+    let playbackRate = 1
     keyboard.set(' ', null, vm.playpause)
     keyboard.set('ArrowUp', () => vm.relativeVolume(0.1))
     keyboard.set('ArrowDown', () => vm.relativeVolume(-0.1))
@@ -307,9 +308,12 @@ export const App = defineComponent({
     keyboard.set('PageDown', vm.next)
     keyboard.set('ArrowLeft', null, () => vm.relativeSeek(-5))
     keyboard.set('ArrowRight', (e, repeat) => {
-      if (repeat === 1) { vm.player.speed(3) }
+      if (repeat === 1) {
+        ({ playbackRate } = vm.player.video)
+        vm.player.speed(3, 0)
+      }
     }, (e, repeat) => {
-      if (repeat > 0) { vm.player.speed(1); return }
+      if (repeat > 0) { vm.player.speed(playbackRate, 1); return }
       vm.relativeSeek(5)
     })
     let isPaused = false
@@ -332,12 +336,6 @@ export const App = defineComponent({
       if (dur === dur) { e.preventDefault() }
     }, { capture: true, signal })
 
-    const barInst = createApp(BarVue, { video: vm.player.video })
-    const barContainer = document.createElement('div')
-    barInst.mount(barContainer)
-    document.body.append(barContainer)
-    onAbort(signal, barInst.unmount)
-
     if (mediaSession != null) {
       setActionHandler('seekbackward', () => vm.relativeSeek(-5))
       setActionHandler('seekforward', () => vm.relativeSeek(5))
@@ -357,7 +355,7 @@ export const App = defineComponent({
   render(_, cache, props, setup, data, ctx) {
     const vm = this, size = vm.size.split('*')
     return [
-      h('div', { class: 'container', style: 'margin-top: 6px' }, [
+      h('div', { class: 'container', style: 'margin:5px auto' }, [
         h(Row, { gutter: 6 }, cache[__LINE__] ??= () => [
           h(Col, { span: 12 }, cache[__LINE__] ??= () => [
             h(Input, {
@@ -367,7 +365,7 @@ export const App = defineComponent({
               onOnSearch: vm.loadVideoFromUrl
             }),
             h(DropFile, {
-              style: 'margin-top: 6px',
+              style: 'margin-top:6px',
               ref: 'drop',
               global: true,
               accept: 'audio/*,video/*',
@@ -376,7 +374,7 @@ export const App = defineComponent({
           ]),
           h(Col, { span: 12 }, cache[__LINE__] ??= () => [
             h(Card, { padding: 0 }, cache[__LINE__] ??= () => [
-              h(CellGroup, { style: 'padding: 0px' }, cache[__LINE__] ??= () => [
+              h(CellGroup, { style: 'padding:0px' }, cache[__LINE__] ??= () => [
                 h(PlayList, {
                   ref: 'playList',
                   list: vm.list,
@@ -412,12 +410,16 @@ export const App = defineComponent({
           ])
         ])
       ]),
-      h(Divider, { style: 'margin: 10px 0' }),
-      h(DPlayerVue, { ref: 'player', width: +size[0], height: +size[1] }),
-      h(Divider, { style: 'margin: 10px 0' }),
-      h('div', { class: 'container', style: 'margin-bottom: 24px' }, [
-        h(Card, { style: 'width: 274px' }, cache[__LINE__] ??= () => h('img', {
-          ref: 'image', style: 'width: 100%', onClick: vm.showImage
+      h(DPlayerVue, {
+        ref: 'player', width: +size[0], height: +size[1]
+      }, cache[__LINE__] ??= () => h(BarVue, {
+        video: vm.player?.video, style: {
+          position: 'relative', bottom: 'unset'
+        }
+      })),
+      h('div', { class: 'container', style: 'margin:5px auto 24px' }, [
+        h(Card, { style: 'width:274px' }, cache[__LINE__] ??= () => h('img', {
+          ref: 'image', style: 'width:100%', onClick: vm.showImage
         }))
       ])
     ]

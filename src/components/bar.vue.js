@@ -1,15 +1,19 @@
 
-import { defineComponent, createVNode as h, shallowRef as sr, watch, onMounted, onBeforeUnmount } from 'vue'
-import { bindCall, getPropDesc, empty, on } from '../bind'
+import { defineComponent, createVNode as h, shallowRef as sr, watch, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
+import { bindCall, call, getPropDesc, empty, on, off, document } from '../bind'
 import { createAborter } from '../aborter'
 
+const { min, max } = Math
 const ElemProto = HTMLElement.prototype
 const MediaProto = HTMLMediaElement.prototype
 const TimeRangesProto = TimeRanges.prototype
 const setProperty = bindCall(CSSStyleDeclaration.prototype.setProperty)
+const _getRect = ElemProto.getBoundingClientRect
 
 const getStyle = bindCall(getPropDesc(ElemProto, 'style').get)
-const getCurrentTime = bindCall(getPropDesc(MediaProto, 'currentTime').get)
+const currentTimeDesc = getPropDesc(MediaProto, 'currentTime')
+const getCurrentTime = bindCall(currentTimeDesc.get)
+const setCurrentTime = bindCall(currentTimeDesc.set)
 const getDuration = bindCall(getPropDesc(MediaProto, 'duration').get)
 //const getSeekable = bindCall(getPropDesc(MediaProto, 'seekable').get)
 const getBuffered = bindCall(getPropDesc(MediaProto, 'buffered').get)
@@ -40,7 +44,9 @@ export default defineComponent({
     video: { type: HTMLVideoElement }
   },
   setup(props) {
-    let video, abort = null, duration100 = 0, buffered, played
+    const inst = getCurrentInstance()
+    let video, abort = null, isMousedown = false
+    let duration100 = 0, buffered, played
     const $buffered = sr(empty)
     const $played = sr(empty)
     const durationchange = e => {
@@ -54,7 +60,7 @@ export default defineComponent({
     const timeupdate = e => {
       played = getPlayed(video)
       $played.value = null
-      setProperty(pointerStyle, 'left', `${getCurrentTime(video) / duration100}%`)
+      isMousedown || setProperty(pointerStyle, 'left', `${getCurrentTime(video) / duration100}%`)
     }
     const loadstart = e => {
       durationchange(e)
@@ -73,15 +79,37 @@ export default defineComponent({
       let aborter = createAborter(); ({ abort } = aborter)
       on(video, 'loadstart', loadstart, aborter)
       on(video, 'durationchange', durationchange, aborter)
-      on(video, 'loadeddata', progress, aborter)
+      on(video, 'loadedmetadata', progress, aborter)
       on(video, 'progress', progress, aborter)
       on(video, 'seeking', timeupdate, aborter)
       on(video, 'timeupdate', timeupdate, aborter)
       loadstart()
     }, { immediate: true }))
+
+    let x, width, percent
+    const onMousedown = e => {
+      if (!(duration100 > 0)) { return }
+      isMousedown = true
+      on(document, 'mousemove', onMousemove)
+      on(document, 'mouseup', onMouseup)
+      !({ x, width } = call(_getRect, inst.vnode.el))
+      onMousemove(e)
+    }
+    const onMousemove = e => {
+      percent = min(max((e.clientX - x) / width, 0), 1) * 100
+      setProperty(pointerStyle, 'left', `${percent}%`)
+    }
+    const onMouseup = e => {
+      isMousedown = false
+      off(document, 'mousemove', onMousemove)
+      off(document, 'mouseup', onMouseup)
+      onMousemove(e)
+      setCurrentTime(video, percent * duration100)
+    }
+
     onBeforeUnmount(() => abort?.())
     let pointerStyle, pointerVNode
-    return () => h('div', { class: rootClass }, [
+    return () => h('div', { class: rootClass, onMousedown }, [
       pointerVNode ??= h('div', {
         class: pointerClass, key: 'pointer',
         ref(el) { pointerStyle = getStyle(el) }

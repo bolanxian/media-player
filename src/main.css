@@ -57,8 +57,9 @@
 .ivu-loading-bar.ivu-loading-bar--player {
   height: 5px;
   top: unset;
-  bottom: 0;
-  z-index: 200000;
+  bottom: 5px;
+  cursor: pointer;
+  z-index: 999;
 }
 
 .ivu-loading-bar.ivu-loading-bar--player>.ivu-loading-bar-inner {
@@ -68,10 +69,11 @@
 }
 
 .ivu-loading-bar.ivu-loading-bar--player>.ivu-loading-bar-inner.ivu-loading-bar-inner--pointer {
-  background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2IDUiPjxwYXRoIGQ9Ik0wIDBINkwzIDVaIiBmaWxsPSJyZWQiLz48L3N2Zz4");
+  background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2IDE1Ij48cGF0aCBkPSJNMCAwSDZMMyA1Wk0wIDE1SDZMMyAxMFoiIGZpbGw9InJlZCIvPjwvc3ZnPg");
   margin-left: -3px;
   width: 6px;
-  bottom: 5px;
+  height: 15px;
+  top: -5px;
 }
 
 .dplayer {
@@ -138,4 +140,5 @@
   width: min-content;
   margin: 0 auto;
   border: 2px solid #CCC;
+  background: #000;
 }

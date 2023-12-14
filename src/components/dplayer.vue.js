@@ -1,6 +1,9 @@
 
 import { defineComponent, createVNode as h, shallowRef as sr } from 'vue'
 import DPlayer from 'dplayer'
+import { $array } from '../bind'
+const { sort } = $array
+const compareDan = (a, b) => (a.time - b.time)
 
 export default defineComponent({
   props: {
@@ -22,7 +25,7 @@ export default defineComponent({
     },
     readDanmaku(dan) {
       const { danmaku } = this.player
-      danmaku.dan = dan.sort((a, b) => (a.time - b.time))
+      danmaku.dan = sort(dan, compareDan)
       danmaku.seek()
     },
     seekDanmaku() {
@@ -46,11 +49,11 @@ export default defineComponent({
     relativeSeek(time) {
       this.player.seek(this.video.currentTime + time)
     },
-    speed(rate) {
+    speed(rate, timeout) {
       const { player, video } = this
       rate = +rate
       video.playbackRate = rate
-      player.notice(`${rate} 倍速播放中`, rate === 1 ? 1 : 0, void 0, 'speed')
+      player.notice(`${rate} 倍速播放中`, timeout, void 0, 'speed')
     }
   },
   mounted() {
@@ -76,7 +79,7 @@ export default defineComponent({
     this.player = null
   },
   render() {
-    const vm = this, { width, height } = vm
+    const vm = this, { $slots, width, height } = vm
     return h('div', {
       class: 'player-container player-force-show-controls player-hide-layers',
       style: {
@@ -84,7 +87,8 @@ export default defineComponent({
         '--dplayer-height': height + 'px'
       }
     }, [
-      h('div', { ref: 'container', class: 'dplayer' })
+      h('div', { ref: 'container', class: 'dplayer' }),
+      $slots.default?.()
     ])
   }
 })
