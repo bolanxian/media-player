@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-11 -11 22 22">
+  <style>
+    @keyframes start{
+      0%{opacity:0}
+      100%{opacity:100%}
+    }
+    @keyframes r{
+      0%,100%{}
+      25%{transform:rotateY(180deg)}
+      50%{transform:rotateY(180deg) rotateX(180deg)}
+      75%{transform:rotateY(0deg) rotateX(180deg)}
+    }
+    use{transform-origin: 0px 0px;animation:start 1.25s linear,r 5s infinite linear}
+  </style>
+  <defs>
+    <rect id="rect" x="1" y="1" width="10" height="10"></rect>
+  </defs>
+  <g style="transform:rotate(180deg)">
+    <use id="r1" href="#rect" fill="#F00"></use>
+  </g>
+  <g style="transform:rotate(-90deg)">
+    <use id="r2" href="#rect" fill="#0F0"></use>
+  </g>
+  <g>
+    <use id="r3" href="#rect" fill="#00F"></use>
+  </g>
+  <g style="transform:rotate(90deg)">
+    <use id="r4" href="#rect" fill="#FF0"></use>
+  </g>
+</svg>
