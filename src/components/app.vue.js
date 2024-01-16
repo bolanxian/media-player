@@ -79,7 +79,7 @@ export const App = defineComponent({
     options() {
       const vm = this, { sizes } = vm
       const opts = shallowReactive(vm.playerOptions)
-      const redirector = shallowReactive({ loading: false, disabled: false })
+      const redirector = shallowReactive({ loading: false, error: false })
       Modal.confirm({
         title: '设置',
         width: 600,
@@ -102,24 +102,24 @@ export const App = defineComponent({
               h(Cell, { title: '油猴脚本' }, {
                 extra: () => h(ButtonGroup, null, () => [
                   gmxhr == null ? null : h(Button, {
-                    type: 'button',
+                    type: redirector.error ? 'error' : 'default',
                     loading: redirector.loading,
-                    disabled: redirector.disabled,
                     async onClick() {
                       try {
                         redirector.loading = true
+                        redirector.error = false
                         const srcipt = await external.createRedirector()
                         const url = URL.createObjectURL(new Blob([srcipt], { type: 'text/plain' }))
                         download(url)
-                        redirector.loading = false
                       } catch (e) {
-                        redirector.disabled = true
+                        redirector.error = true
                         throw e
+                      } finally {
+                        redirector.loading = false
                       }
                     }
                   }, () => external.redirectorName),
                   h(Button, {
-                    type: 'button',
                     onClick() {
                       const srcipt = external.createUserScript()
                       const url = URL.createObjectURL(new Blob([srcipt], { type: 'text/plain' }))
@@ -240,6 +240,15 @@ export const App = defineComponent({
     },
     playpause() {
       this.player.playpause()
+    },
+    async retry() {
+      const { video } = this.player
+      if (video == null) { return }
+      const { src, currentTime, paused } = video
+      setTimeout(() => { video.src = src }, 0)
+      await utils.waitEvent(video, 'loadedmetadata')
+      video.currentTime = currentTime
+      if (!paused) { video.play() }
     },
     captureImage() {
       const { video } = this.player
@@ -375,6 +384,14 @@ export const App = defineComponent({
           h(Col, { span: 12 }, cache[__LINE__] ??= () => [
             h(Card, { padding: 0 }, cache[__LINE__] ??= () => [
               h(CellGroup, { style: 'padding:0px' }, cache[__LINE__] ??= () => [
+                h(Cell, { title: '\u3000' }, cache[__LINE__] ??= {
+                  extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => [
+                    h(Button, { onClick: vm.retry }, () => '重试'),
+                    h(Button, { onClick: vm.options }, () => '设置'),
+                    h(Button, { onClick: vm.captureImage }, () => '截图'),
+                    h(Button, { onClick: vm.saveImage }, () => '保存截图')
+                  ])
+                }),
                 h(PlayList, {
                   ref: 'playList',
                   list: vm.list,
@@ -397,13 +414,6 @@ export const App = defineComponent({
                   ref: 'danmaku',
                   file: vm.file, title: vm.title,
                   onDanmaku: vm.handleDanmaku
-                }),
-                h(Cell, { title: '\u3000' }, cache[__LINE__] ??= {
-                  extra: () => h(ButtonGroup, null, () => [
-                    h(Button, { onClick: vm.options }, () => '设置'),
-                    h(Button, { onClick: vm.captureImage }, () => '截图'),
-                    h(Button, { onClick: vm.saveImage }, () => '保存截图')
-                  ])
                 })
               ])
             ])

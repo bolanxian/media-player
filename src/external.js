@@ -1,7 +1,10 @@
 
+import { $string, $array } from './bind'
+import { gmxhr } from './utils'
 import * as ddplayApi from './ddplay-api'
 import GM_fetch_raw from './GM-fetch?raw'
-const { fromCharCode: chr } = String
+const { fromCharCode: chr } = String, { from } = Array
+const { toLowerCase } = $string, { join } = $array
 
 export const createUserScript = () => {
   const { href, hostname } = new URL(location.pathname, location.href)
@@ -16,7 +19,7 @@ export const createUserScript = () => {
 // @run-at document-start
 // @grant GM_xmlhttpRequest
 // @grant GM_fetch
-${ddplayApi.hosts.map(host => `// @connect ${host}`).join('\n')}
+${join(from(ddplayApi.hosts, host => `// @connect ${host}`), '\n')}
 // @connect *
 // ==/UserScript==
 'use strict';
@@ -31,10 +34,10 @@ unsafeWindow.addEventListener('load', () => { apply(_emit, unsafeWindow, [e]) },
 export const redirectorName = `${chr(84)}${chr(117)}${chr(99)}${chr(97)}${chr(111)}`
 export const createRedirector = async () => {
   const { href, hostname } = new URL(location.pathname, location.href)
-  const url = await new Promise((ok, onerror) => {
+  const { finalUrl: url } = await new Promise((ok, onerror) => {
     gmxhr({
-      url: `https://www.${redirectorName.toLowerCase()}.${chr(102)}${chr(117)}${chr(110)}/favicon.ico`,
-      onload(resp) { ok(resp.finalUrl) }, onerror
+      url: `https://www.${toLowerCase(redirectorName)}.${chr(102)}${chr(117)}${chr(110)}/favicon.ico`,
+      onload(resp) { ok(resp) }, onerror
     })
   })
   return `\
@@ -62,16 +65,19 @@ export const createRedirector = async () => {
   await once(doc, 'DOMContentLoaded')
   const el = await wait(() => doc.querySelector('#video_part #part_lists a[pid]') ?? void 0, tick0_5)
   const title = doc.evaluate('//h1[contains(@class,"show_title")]/text()', doc, null, STRING_TYPE, null).stringValue
+  const hasPartName = /^\\u5B8C\\u7ED3/.test(doc.querySelectorAll('.show_top>.l>.t>a')[1]?.textContent)
   const xpath = doc.createExpression('concat("[",./*/*/text(),"]",./*/text())', null)
   const lists = el.closest('#part_lists').cloneNode(true)
   for (const el of lists.querySelectorAll('a[pid]')) {
     let m = el.getAttribute('pid')?.match(/(^|&)file=([^&]*)(&|$)/i)
     if (m != null) {
-      let result = xpath.evaluate(el, STRING_TYPE, null)
-      el.href = createUrl(${'`${title} ${result.stringValue}`'}, unescape(m[2]))
+      let result = hasPartName ? xpath.evaluate(el, STRING_TYPE, null) : null
+      el.href = createUrl(hasPartName ? ${'`${title} ${result.stringValue}`'} : title, unescape(m[2]))
     }
   }
-  el.closest('#video_part').append(lists)
+  const part = el.closest('#video_part')
+  part.append(lists)
+  part.style.display = ''
   console.log(title, el, lists)
 })();
 `
