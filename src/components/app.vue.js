@@ -3,11 +3,11 @@
  * @createDate 2019-8-25 15:01:48
 */
 import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount } from 'vue'
-import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal } from 'view-ui-plus'
+import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Dropdown, Slider, Icon } from 'view-ui-plus'
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
 import { gmxhr, formatSize, download } from '../utils'
-import { noop, bind, $number, $string, on, document, setTitle } from '../bind'
+import { noop, bind, $number, $string, $array, on, fromEntries, document, setTitle } from '../bind'
 import { createAborter, onAbort } from '../aborter'
 import { KeyboardHandler } from '../keyboard'
 import { getState, getPopState, pushState, replaceState, buildState } from '../history'
@@ -20,11 +20,22 @@ import DDPlayVue from './ddplay-api.vue'
 
 const { toFixed } = $number
 const { startsWith } = $string
+const { from } = Array, { findIndex } = $array
 const { mediaSession } = navigator
 let setActionHandler = noop
 if (typeof MediaSession === 'function') {
   setActionHandler = bind(MediaSession.prototype.setActionHandler, mediaSession)
 }
+const speedList = from(function* (i) {
+  for (; i < 100; i += 1) { yield i }
+  for (; i < 300; i += 5) { yield i }
+  for (; i <= 500; i += 10) { yield i }
+}(50), i => i / 100)
+const marks = fromEntries(function* () {
+  for (const speed of [.5, .75, 1, 2, 3, 4, 5]) {
+    yield [findIndex(speedList, i => i === speed), `${speed}×`]
+  }
+}())
 
 const name = 'Media Player'
 export const App = defineComponent({
@@ -57,7 +68,9 @@ export const App = defineComponent({
       size: sizes[playerOptions.size] ?? sizes[1],
       list: [],
       file: null,
-      title: null
+      title: null,
+      preservesPitch: true,
+      speedIndex: findIndex(speedList, i => i === 1)
     }
   },
   watch: {
@@ -73,7 +86,13 @@ export const App = defineComponent({
       },
       immediate: true,
       flush: 'sync'
-    }
+    },
+    preservesPitch(value) {
+      this.player.video.preservesPitch = value
+    },
+    speedIndex(i) {
+      this.player.video.playbackRate = speedList[i]
+    },
   },
   methods: {
     options() {
@@ -91,7 +110,7 @@ export const App = defineComponent({
                   type: 'button',
                   modelValue: opts.size,
                   'onUpdate:modelValue'(index) { opts.size = index }
-                }, () => Array.from(sizes, (size, index) => h(Radio, { label: index }, () => size)))
+                }, () => from(sizes, (size, index) => h(Radio, { label: index }, () => size)))
               }),
               h(Cell, { title: '页面不可见时暂停' }, {
                 extra: () => h(Switch, {
@@ -160,6 +179,7 @@ export const App = defineComponent({
       const vm = this, { player } = vm, { video } = player
       URL.revokeObjectURL(video.src)
       video.src = url
+      vm.player.video.playbackRate = speedList[vm.speedIndex]
       return utils.waitEvent(video, 'canplay')
     },
     loadVideoFromUrl(url, title) {
@@ -401,14 +421,47 @@ export const App = defineComponent({
                   extra: () => h(RadioGroup, {
                     type: 'button',
                     modelValue: vm.size,
-                    'onUpdate:modelValue'(value) { vm.size = value }
-                  }, cache[__LINE__] ??= () => Array.from(vm.sizes, size => h(Radio, { label: size }, () => size))),
+                    'onUpdate:modelValue': cache[__LINE__] ??= (value) => { vm.size = value }
+                  }, cache[__LINE__] ??= () => from(vm.sizes, size => h(Radio, { label: size }, () => size))),
                 }),
                 h(Cell, { title: '快进快退' }, cache[__LINE__] ??= {
-                  extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => Array.from(vm.relativeSeeks, (seek) => {
+                  extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => from(vm.relativeSeeks, (seek) => {
                     const { value, slot } = (typeof seek == 'number' ? { value: seek, slot: String(seek) } : seek)
                     return h(Button, { onClick() { vm.relativeSeek(value) } }, () => slot)
                   }))
+                }),
+                h(Cell, null, cache[__LINE__] ??= {
+                  default: () => [
+                    h(Dropdown, cache[__LINE__] ??= {
+                      placement: 'top', transfer: true
+                    }, cache[__LINE__] ??= {
+                      default: () => [
+                        h(Icon, { type: 'ios-arrow-up' }),
+                        `速度: ${speedList[vm.speedIndex]}×`
+                      ],
+                      list: () => [
+                        h('ul', { class: 'ivu-dropdown-menu' }, [
+                          h('li', { class: 'ivu-dropdown-item', style: 'margin-top:20px' }, [
+                            h(Slider, {
+                              style: 'width:650px;margin-left:50px;margin-right:50px',
+                              min: 0, max: speedList.length - 1, step: 1, marks,
+                              tipFormat: cache[__LINE__] ??= (i) => `${speedList[i]}×`,
+                              modelValue: vm.speedIndex,
+                              'onUpdate:modelValue': cache[__LINE__] ??= (value) => { vm.speedIndex = value }
+                            })
+                          ])
+                        ])
+                      ]
+                    })
+                  ],
+                  extra: () => [
+                    h(Switch, {
+                      title: '保持音高',
+                      size: 'large',
+                      modelValue: vm.preservesPitch,
+                      'onUpdate:modelValue': cache[__LINE__] ??= (value) => { vm.preservesPitch = value }
+                    })
+                  ]
                 }),
                 h(DDPlayVue, {
                   ref: 'danmaku',
@@ -423,11 +476,11 @@ export const App = defineComponent({
       h(DPlayerVue, {
         ref: 'player', width: +size[0], height: +size[1]
       }, cache[__LINE__] ??= () => h(BarVue, {
-        video: vm.player?.video, style: {
+        video: vm.player?.video, style: cache[__LINE__] ??= {
           position: 'relative', bottom: 'unset'
         }
       })),
-      h('div', { class: 'container', style: 'margin:5px auto 24px' }, [
+      h('div', { class: 'container', style: 'margin:5px auto 240px' }, [
         h(Card, { style: 'width:274px' }, cache[__LINE__] ??= () => h('img', {
           ref: 'image', style: 'width:100%', onClick: vm.showImage
         }))
