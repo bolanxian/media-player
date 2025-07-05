@@ -21,7 +21,6 @@ export default defineComponent({
   methods: {
     setVideo(url) {
       this.video.src = url
-      //this.player.switchVideo({ url }, {})
     },
     readDanmaku(dan) {
       const { danmaku } = this.player
@@ -48,12 +47,6 @@ export default defineComponent({
     },
     relativeSeek(time) {
       this.player.seek(this.video.currentTime + time)
-    },
-    speed(rate, timeout) {
-      const { player, video } = this
-      rate = +rate
-      video.playbackRate = rate
-      player.notice(`${rate} 倍速播放中`, timeout, void 0, 'speed')
     }
   },
   mounted() {

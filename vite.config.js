@@ -28,6 +28,18 @@ const externalAssets = () => {
     }
   }
 }
+const renderCache = () => {
+  const filter = createFilter('**/*.vue.js', 'node_modules/**')
+  const reg = /(?<=[^\w$])__LINE__(?=[^\w$])/, mapFn = (code, line) => code.replace(reg, line)
+  return {
+    name: 'render-cache',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!filter(id)) { return }
+      return code.split('\n').map(mapFn).join('\n')
+    }
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -47,6 +59,7 @@ export default defineConfig({
     cssCodeSplit: false,
     minify: false,
     rollupOptions: {
+      treeshake: 'smallest',
       output: {
         minifyInternalExports: false
       },
@@ -71,6 +84,7 @@ export default defineConfig({
     vue(),
     externalAssets(),
     bindScript(),
+    renderCache(),
     {
       name: 'view-ui-plus',
       enforce: 'pre',
@@ -92,18 +106,6 @@ export const version = pkg.version`
         }
       }
     },
-    (() => {
-      const filter = createFilter('**/*.vue.js', 'node_modules/**')
-      const reg = /(?<=[^\w$])__LINE__(?=[^\w$])/, mapFn = (code, line) => code.replace(reg, line)
-      return {
-        name: 'vue-rander-cache',
-        enforce: 'pre',
-        transform(code, id) {
-          if (!filter(id)) { return }
-          return code.split('\n').map(mapFn).join('\n')
-        }
-      }
-    })(),
     {
       name: 'spin-img',
       enforce: 'pre',

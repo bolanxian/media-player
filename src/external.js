@@ -48,6 +48,7 @@ export const createRedirector = async () => {
 // @description try to take over the world!
 // @author ${hostname}
 // @match ${new URL('/', url)}play/*/
+// @include /^https?:\\/\\/www\\.${toLowerCase(redirectorName)}[^/]*?\\/play\\/h\\d+\\/$/
 // @run-at document-start
 // ==/UserScript==
 !(async function () {
@@ -65,8 +66,8 @@ export const createRedirector = async () => {
   await once(doc, 'DOMContentLoaded')
   const el = await wait(() => doc.querySelector('#video_part #part_lists a[pid]') ?? void 0, tick0_5)
   const title = doc.evaluate('//h1[contains(@class,"show_title")]/text()', doc, null, STRING_TYPE, null).stringValue
-  const hasPartName = /^\\u5B8C\\u7ED3/.test(doc.querySelectorAll('.show_top>.l>.t>a')[1]?.textContent)
-  const xpath = doc.createExpression('concat("[",./*/*/text(),"]",./*/text())', null)
+  const hasPartName = !0
+  const xpath = doc.createExpression('concat("[",./*/span/text(),"]",./*/em/text())', null)
   const lists = el.closest('#part_lists').cloneNode(true)
   for (const el of lists.querySelectorAll('a[pid]')) {
     let m = el.getAttribute('pid')?.match(/(^|&)file=([^&]*)(&|$)/i)

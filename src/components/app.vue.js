@@ -2,12 +2,13 @@
 /**
  * @createDate 2019-8-25 15:01:48
 */
-import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount } from 'vue'
-import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Dropdown, Slider, Icon } from 'view-ui-plus'
+const name = 'Media Player'
+import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount, watch } from 'vue'
+import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Poptip, Slider, Icon } from 'view-ui-plus'
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
 import { gmxhr, formatSize, download } from '../utils'
-import { noop, bind, $number, $string, $array, on, fromEntries, document, setTitle } from '../bind'
+import { $number, $string, $array, on, off, fromEntries, document, setTitle, canHover, mediaSession, setActionHandler } from '../bind'
 import { createAborter, onAbort } from '../aborter'
 import { KeyboardHandler } from '../keyboard'
 import { getState, getPopState, pushState, replaceState, buildState } from '../history'
@@ -21,11 +22,8 @@ import DDPlayVue from './ddplay-api.vue'
 const { toFixed } = $number
 const { startsWith } = $string
 const { from } = Array, { findIndex } = $array
-const { mediaSession } = navigator
-let setActionHandler = noop
-if (typeof MediaSession === 'function') {
-  setActionHandler = bind(MediaSession.prototype.setActionHandler, mediaSession)
-}
+const trigger = canHover ? 'hover' : 'click'
+
 const speedList = from(function* (i) {
   for (; i < 100; i += 1) { yield i }
   for (; i < 300; i += 5) { yield i }
@@ -37,7 +35,6 @@ const marks = fromEntries(function* () {
   }
 }())
 
-const name = 'Media Player'
 export const App = defineComponent({
   name,
   setup(props) {
@@ -65,12 +62,14 @@ export const App = defineComponent({
   data() {
     const { sizes, playerOptions } = this
     return {
+      extra: false,
       size: sizes[playerOptions.size] ?? sizes[1],
       list: [],
       file: null,
       title: null,
       preservesPitch: true,
-      speedIndex: findIndex(speedList, i => i === 1)
+      speedIndex: findIndex(speedList, i => i === 1),
+      playbackRate: 1
     }
   },
   watch: {
@@ -91,8 +90,8 @@ export const App = defineComponent({
       this.player.video.preservesPitch = value
     },
     speedIndex(i) {
-      this.player.video.playbackRate = speedList[i]
-    },
+      this.player.video.playbackRate = +speedList[i]
+    }
   },
   methods: {
     options() {
@@ -179,7 +178,7 @@ export const App = defineComponent({
       const vm = this, { player } = vm, { video } = player
       URL.revokeObjectURL(video.src)
       video.src = url
-      vm.player.video.playbackRate = speedList[vm.speedIndex]
+      vm.player.video.playbackRate = +vm.playbackRate
       return utils.waitEvent(video, 'canplay')
     },
     loadVideoFromUrl(url, title) {
@@ -251,6 +250,9 @@ export const App = defineComponent({
     },
     handleDanmaku(dan) {
       this.player.readDanmaku(dan)
+    },
+    handleRateChange(e) {
+      this.playbackRate = this.player.video.playbackRate
     },
     relativeSeek(time) {
       this.player.relativeSeek(time)
@@ -338,11 +340,11 @@ export const App = defineComponent({
     keyboard.set('ArrowLeft', null, () => vm.relativeSeek(-5))
     keyboard.set('ArrowRight', (e, repeat) => {
       if (repeat === 1) {
-        ({ playbackRate } = vm.player.video)
-        vm.player.speed(3, 0)
+        playbackRate = vm.player.video.playbackRate
+        vm.player.video.playbackRate = 3
       }
     }, (e, repeat) => {
-      if (repeat > 0) { vm.player.speed(playbackRate, 1); return }
+      if (repeat > 0) { vm.player.video.playbackRate = +playbackRate; return }
       vm.relativeSeek(5)
     })
     let isPaused = false
@@ -432,27 +434,23 @@ export const App = defineComponent({
                 }),
                 h(Cell, null, cache[__LINE__] ??= {
                   default: () => [
-                    h(Dropdown, cache[__LINE__] ??= {
-                      placement: 'top', transfer: true
+                    h(Poptip, cache[__LINE__] ??= {
+                      trigger, placement: 'top', transfer: true
                     }, cache[__LINE__] ??= {
                       default: () => [
-                        h(Icon, { type: 'ios-arrow-up' }),
-                        `速度: ${speedList[vm.speedIndex]}×`
+                        h(Icon, { type: 'ios-arrow-up' }), '速度'
                       ],
-                      list: () => [
-                        h('ul', { class: 'ivu-dropdown-menu' }, [
-                          h('li', { class: 'ivu-dropdown-item', style: 'margin-top:20px' }, [
-                            h(Slider, {
-                              style: 'width:650px;margin-left:50px;margin-right:50px',
-                              min: 0, max: speedList.length - 1, step: 1, marks,
-                              tipFormat: cache[__LINE__] ??= (i) => `${speedList[i]}×`,
-                              modelValue: vm.speedIndex,
-                              'onUpdate:modelValue': cache[__LINE__] ??= (value) => { vm.speedIndex = value }
-                            })
-                          ])
-                        ])
+                      content: () => [
+                        h(Slider, {
+                          style: 'width:650px;margin:50px 50px 30px',
+                          min: 0, max: speedList.length - 1, step: 1, marks,
+                          tipFormat: cache[__LINE__] ??= (i) => `${speedList[i]}×`,
+                          modelValue: vm.speedIndex,
+                          'onUpdate:modelValue': cache[__LINE__] ??= (value) => { vm.speedIndex = value }
+                        })
                       ]
-                    })
+                    }),
+                    `: ${vm.playbackRate}×`
                   ],
                   extra: () => [
                     h(Switch, {
@@ -463,11 +461,11 @@ export const App = defineComponent({
                     })
                   ]
                 }),
-                h(DDPlayVue, {
+                vm.extra ? h(DDPlayVue, {
                   ref: 'danmaku',
                   file: vm.file, title: vm.title,
                   onDanmaku: vm.handleDanmaku
-                })
+                }) : null
               ])
             ])
           ])
@@ -476,7 +474,9 @@ export const App = defineComponent({
       h(DPlayerVue, {
         ref: 'player', width: +size[0], height: +size[1]
       }, cache[__LINE__] ??= () => h(BarVue, {
-        video: vm.player?.video, style: cache[__LINE__] ??= {
+        video: vm.player?.video,
+        onRatechange: vm.handleRateChange,
+        style: cache[__LINE__] ??= {
           position: 'relative', bottom: 'unset'
         }
       })),

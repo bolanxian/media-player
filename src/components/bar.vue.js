@@ -43,7 +43,7 @@ export default defineComponent({
   props: {
     video: { type: HTMLVideoElement }
   },
-  setup(props) {
+  setup(props, { emit }) {
     const inst = getCurrentInstance()
     let video, abort = null, isMousedown = false
     let duration100 = 0, buffered, played
@@ -62,10 +62,12 @@ export default defineComponent({
       $played.value = null
       isMousedown || setProperty(pointerStyle, 'left', `${getCurrentTime(video) / duration100}%`)
     }
+    const ratechange = e => { emit('ratechange', e) }
     const loadstart = e => {
       durationchange(e)
       progress(e)
       timeupdate(e)
+      ratechange(e)
     }
     onMounted(() => watch(() => props.video, _video => {
       video = _video; abort?.()
@@ -83,7 +85,8 @@ export default defineComponent({
       on(video, 'progress', progress, aborter)
       on(video, 'seeking', timeupdate, aborter)
       on(video, 'timeupdate', timeupdate, aborter)
-      loadstart()
+      on(video, 'ratechange', ratechange, aborter)
+      loadstart(null)
     }, { immediate: true }))
 
     let x, width, percent
