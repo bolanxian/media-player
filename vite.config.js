@@ -2,41 +2,88 @@ import { defineConfig, createFilter } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { bindScript } from 'bind-script/plugin.vite'
 
+const viewUiPlus = () => {
+  const filter = { id: /^view-ui-plus$/ }
+  return {
+    name: 'view-ui-plus',
+    enforce: 'pre',
+    apply: 'build',
+    resolveId: { filter, handler(id) { return id } },
+    load: { filter, handler(id) { return `export * from 'view-ui-plus/src/components/index'` } },
+    transform: {
+      filter: { id: /\/node_modules\/view-ui-plus\/src\/utils\/dom\.js$/ },
+      handler(code, id) { return `export { on, off } from 'bind:utils'` }
+    }
+  }
+}
+
+const destroyBuildImportAnalysis = () => {
+  const name = 'Destroy `vite:build-import-analysis`'
+  const preloadHelperIdRE = /^\0vite\/preload-helper\.js$/
+  const filter = { id: preloadHelperIdRE }
+  const dynamicImportPrefixRE = /(?<!\w)__vitePreload(?=\s*\()/
+  const transformChunkRE = /(?<!\w)__vitePreload\(\(\) => ([^,]+?),\s*__VITE_PRELOAD__,\s*import\.meta\.url\)/g
+  return {
+    name,
+    enforce: 'pre',
+    apply: 'build',
+    resolveId: { filter, handler(id) { return id } },
+    load: { filter, handler(id) { return `export let __vitePreload` } },
+    renderChunk(code, chunk) {
+      if (!dynamicImportPrefixRE.test(code)) { return }
+      return code.replace(transformChunkRE, '$1')
+    }
+  }
+}
+
 const externalAssets = () => {
-  const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
+  const reg = /\/(ionicons)-[-\w]{8}\.(\S+?)(?:$|\?)/
+  const fontType = 'woff2'
+  const inject = []
+  const renderBuiltUrl = (fileName, { type, hostId, hostType }) => {
+    if (type === 'asset' && hostType === 'css') {
+      const m = fileName.match(reg)
+      if (m != null) {
+        if (m[2] !== fontType) { return 'about:invalid' }
+        const href = `./${fileName}`
+        inject[inject.length] = {
+          tag: 'link', injectTo: 'head', attrs: {
+            rel: 'preload', crossorigin: !0, href,
+            as: 'font', type: `font/${fontType}`
+          }
+        }
+      }
+    }
+    return { relative: true }
+  }
   return {
     name: 'external-assets',
     apply: 'build',
     config(config, env) {
-      return {
-        experimental: {
-          renderBuiltUrl(fileName, { type, hostId, hostType }) {
-            if (type === 'asset' && hostType === 'css') {
-              const m = fileName.match(reg)
-              if (m != null) { return 'about:invalid' }
-            }
-            return { relative: true }
-          }
-        }
-      }
+      return { experimental: { renderBuiltUrl } }
     },
     generateBundle(options, bundle) {
       for (const fileName of Object.keys(bundle)) {
         const m = fileName.match(reg)
-        if (m != null) { delete bundle[fileName] }
+        if (m != null && m[2] !== fontType) { delete bundle[fileName] }
       }
-    }
+    },
+    transformIndexHtml(html, ctx) { return inject }
   }
 }
+
 const renderCache = () => {
-  const filter = createFilter('**/*.vue.js', 'node_modules/**')
+  const filterFn = createFilter('**/*.vue.js', 'node_modules/**')
+  const filter = { id: { include: /\.vue\.js$/, exclude: /node_modules\// } }
   const reg = /(?<=[^\w$])__LINE__(?=[^\w$])/, mapFn = (code, line) => code.replace(reg, line)
   return {
     name: 'render-cache',
     enforce: 'pre',
-    transform(code, id) {
-      if (!filter(id)) { return }
-      return code.split('\n').map(mapFn).join('\n')
+    transform: {
+      filter, handler(code, id) {
+        if (!filterFn(id)) { return }
+        return code.split('\n').map(mapFn).join('\n')
+      }
     }
   }
 }
@@ -58,59 +105,27 @@ export default defineConfig({
     modulePreload: false,
     cssCodeSplit: false,
     minify: false,
-    rollupOptions: {
-      treeshake: 'smallest',
+    chunkSizeWarningLimit: 1024,
+    rolldownOptions: {
+      treeshake: true,
       output: {
         minifyInternalExports: false
-      },
-      plugins: [{
-        name: 'my-preload',
-        transform: {
-          order: 'post',
-          handler(code, id) {
-            if (id.startsWith('\0vite/preload-helper')) {
-              return `export let __vitePreload`
-            }
-            if (id.startsWith('\0vite/modulepreload-polyfill')) { return '' }
-            if (code.includes('__vitePreload(')) {
-              return code.replace(/__vitePreload\(\(\) => ([^,]+?),__VITE_IS_MODERN__\?"?__VITE_PRELOAD__"?\:void 0,import\.meta\.url\)/, '$1')
-            }
-          }
-        }
-      }]
+      }
     }
   },
   plugins: [
-    vue(),
-    externalAssets(),
     bindScript(),
+    vue(),
+    viewUiPlus(),
+    destroyBuildImportAnalysis(),
+    externalAssets(),
     renderCache(),
-    {
-      name: 'view-ui-plus',
-      enforce: 'pre',
-      apply: 'build',
-      resolveId(source, importer, options) {
-        if (source === 'view-ui-plus') { return source }
-      },
-      load(id) {
-        if (id === 'view-ui-plus') {
-          return `\
-export * from 'view-ui-plus/src/components/index'
-import pkg from 'view-ui-plus/package.json'
-export const version = pkg.version`
-        }
-      },
-      transform(code, id) {
-        if (id.endsWith('/node_modules/view-ui-plus/src/utils/dom.js')) {
-          return `export { on, off } from 'bind:utils'`
-        }
-      }
-    },
     {
       name: 'spin-img',
       enforce: 'pre',
-      transform(code, id) {
-        if (id.endsWith('?spin-img')) {
+      transform: {
+        filter: { id: /\?spin-img$/ },
+        handler(code, id) {
           code = code.replace(/\/\*<base64>\*\/`([\s\S]*?)`\/\*<\/base64>\*\//g, (_, m) => {
             m = m.replace(/\s*\n\s*/g, '')
             m = `data:image/svg+xml;base64,${Buffer.from(m, 'utf-8').toString('base64')}`
