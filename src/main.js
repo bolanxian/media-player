@@ -1,38 +1,36 @@
 
-import { createApp, shallowRef as sr, createVNode as h, onMounted, onErrorCaptured } from 'vue'
+import { createApp, shallowReactive, createVNode as h, onMounted, onErrorCaptured } from 'vue'
 import { Spin, Bar } from './components/spin.vue?spin-img'
 import { setGrant, beforeLoad } from './utils'
-const { isNaN } = Number
+const { defineProperty } = Object
 
 const ready = beforeLoad('external:tampermonkey:grant')
 const AppPromise = import('./components/app.vue')
 createApp({
-  setup() {
-    const show = sr(0)
-    let App, vm
+  setup(_, { expose }) {
+    const data = shallowReactive({ loading: false, error: false })
+    let App, props, vm
     onMounted(async () => {
       try {
+        data.loading = true
         App = (await AppPromise).App
-        show.value = 1
         setGrant((await ready)?.detail)
-        show.value = 2
       } catch (e) {
-        show.value = 0 / 0
+        data.error = true
         throw e
+      } finally {
+        data.loading = false
       }
     })
     onErrorCaptured((error, inst, info) => {
-      if (vm === inst) { show.value = 0 / 0 }
+      if (vm === inst) { data.error = true }
     })
-    const props = { ref(_) { window._vm = vm = _ }, show }
-    return () => {
-      const $show = show.value
-      const loading = $show <= 1, error = isNaN($show)
-      return [
-        App != null ? h(App, props) : null,
-        h(Spin, { show: loading }),
-        h(Bar, { loading, error })
-      ]
-    }
+    defineProperty(window, 'vm', { get() { return vm } })
+    expose(data)
+    return () => [
+      App != null ? h(App, props ??= { ref(_) { vm = _ } }) : null,
+      h(Spin, { show: data.loading }),
+      h(Bar, data)
+    ]
   }
 }).mount('#app')

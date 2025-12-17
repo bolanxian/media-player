@@ -3,12 +3,12 @@
  * @createDate 2019-8-25 15:01:48
 */
 const name = 'Media Player'
-import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount, watch } from 'vue'
+import { defineComponent, createVNode as h, shallowRef as sr, shallowReactive, onBeforeUnmount } from 'vue'
 import { Message, Row, Col, Card, CellGroup, Cell, ButtonGroup, Button, Input, Switch, RadioGroup, Radio, Modal, Poptip, Slider, Icon } from 'view-ui-plus'
 import Viewer from 'viewerjs'
 import * as utils from '../utils'
 import { gmxhr, formatSize, download } from '../utils'
-import { $number, $string, $array, on, off, fromEntries, document, setTitle, canHover, mediaSession, setActionHandler } from '../bind'
+import { $number, $string, $array, on, fromEntries, document, setTitle, canHover, mediaSession, setActionHandler } from '../bind'
 import { createAborter, onAbort } from '../aborter'
 import { KeyboardHandler } from '../keyboard'
 import { getState, getPopState, pushState, replaceState, buildState } from '../history'
@@ -34,6 +34,17 @@ const marks = fromEntries(function* () {
     yield [findIndex(speedList, i => i === speed), `${speed}×`]
   }
 }())
+const sizes = ['960*0', '960*540', '1280*720']
+const relativeSeeks = [...function* () {
+  for (const seek of [
+    -95, -10, -5,
+    { value: -1 / 30, slot: '-1帧' },
+    { value: 1 / 30, slot: '1帧' },
+    5, 10, 85,
+  ]) {
+    yield typeof seek == 'number' ? { value: seek, slot: String(seek) } : seek
+  }
+}()]
 
 export const App = defineComponent({
   name,
@@ -48,11 +59,6 @@ export const App = defineComponent({
     return {
       signal,
       playerOptions: opts,
-      sizes: ['960*0', '960*540', '1280*720'],
-      relativeSeeks: [
-        -95, -10, -5, { value: -1 / 30, slot: '-1帧' }, { value: 1 / 30, slot: '1帧' }, 5, 10, 85
-      ],
-      imageType: 'image/png',
       viewer: null,
       keyboard: new KeyboardHandler(document, signal),
       playList: sr(null),
@@ -60,7 +66,7 @@ export const App = defineComponent({
     }
   },
   data() {
-    const { sizes, playerOptions } = this
+    const { playerOptions } = this
     return {
       extra: false,
       size: sizes[playerOptions.size] ?? sizes[1],
@@ -69,7 +75,9 @@ export const App = defineComponent({
       title: null,
       preservesPitch: true,
       speedIndex: findIndex(speedList, i => i === 1),
-      playbackRate: 1
+      playbackRate: 1,
+      error: null,
+      retryLoading: false,
     }
   },
   watch: {
@@ -95,7 +103,7 @@ export const App = defineComponent({
   },
   methods: {
     options() {
-      const vm = this, { sizes } = vm
+      const vm = this
       const opts = shallowReactive(vm.playerOptions)
       const redirector = shallowReactive({ loading: false, error: false })
       Modal.confirm({
@@ -174,7 +182,7 @@ export const App = defineComponent({
       }
       this.player.play()
     },
-    $_loadVideo(url) {
+    loadVideoInner(url) {
       const vm = this, { player } = vm, { video } = player
       URL.revokeObjectURL(video.src)
       video.src = url
@@ -190,7 +198,7 @@ export const App = defineComponent({
       }
       url = String(url)
       title ??= ''
-      let canplay = vm.$_loadVideo(url, title)
+      let canplay = vm.loadVideoInner(url, title)
       const state = { title, url }
       pushState(state); vm.title = title; vm.file = null
       if (/^https?:/.test(url)) {
@@ -203,7 +211,7 @@ export const App = defineComponent({
       const vm = this
       let url = URL.createObjectURL(file)
       let title = (file.name ?? '').replace(/\.[^.]+$/, '')
-      const canplay = vm.$_loadVideo(url, title)
+      const canplay = vm.loadVideoInner(url, title)
       const state = { title }, setState = vm.file == null ? pushState : replaceState
       setState(state); vm.title = title; vm.file = file
       vm.canplay = canplay
@@ -211,7 +219,7 @@ export const App = defineComponent({
     },
     loadVideoBackupGmxhr(e) {
       if (gmxhr == null) { return }
-      const { title, player } = this
+      const vm = this, { title, player } = vm
       const dp = player.player
       const video = e?.target ?? player.video
       const { src, error } = video
@@ -223,7 +231,7 @@ export const App = defineComponent({
           gmxhr({
             url: src, responseType: 'blob',
             onload(e) {
-              vm.$_loadVideo(URL.createObjectURL(e.response), title).then(() => {
+              vm.loadVideoInner(URL.createObjectURL(e.response), title).then(() => {
                 dp.notice('使用 GM_xmlhttpRequest 加载成功', void 0, void 0, 'gmxhr')
               })
             },
@@ -254,6 +262,9 @@ export const App = defineComponent({
     handleRateChange(e) {
       this.playbackRate = this.player.video.playbackRate
     },
+    handleError(e) {
+      this.error = this.player.video.error
+    },
     relativeSeek(time) {
       this.player.relativeSeek(time)
     },
@@ -267,26 +278,32 @@ export const App = defineComponent({
       const { video } = this.player
       if (video == null) { return }
       const { src, currentTime, paused } = video
-      setTimeout(() => { video.src = src }, 0)
-      await utils.waitEvent(video, 'loadedmetadata')
-      video.currentTime = currentTime
-      if (!paused) { video.play() }
+      if (!src) { return }
+      try {
+        this.retryLoading = true
+        setTimeout(() => { video.src = src }, 0)
+        await utils.waitEvent(video, 'loadedmetadata')
+        video.currentTime = currentTime
+        if (!paused) { video.play() }
+      } finally {
+        this.retryLoading = false
+      }
     },
-    captureImage() {
-      const { video } = this.player
+    async captureImage() {
+      const { video } = this.player, { image } = this.$refs
       if (video.videoWidth === 0 || video.videoHeight === 0) {
         Message.warning('没有视频'); return
       }
-      utils.captureVideoToImage(video, this.imageType).then(blob => {
-        const { image } = this.$refs
+      let success = false
+      try {
+        const blob = await utils.captureVideoToImage(video, 'image/png')
         URL.revokeObjectURL(image.src)
         image.src = URL.createObjectURL(blob)
-        image.dataset.filename = utils.formatTime(video.currentTime, '-') + '.png'
-        Message.info('截图成功')
-      }, e => {
-        Message.error('截图失败')
-        throw e
-      })
+        image.dataset.filename = `${utils.formatTime(video.currentTime, '-')}.png`
+        success = true
+      } finally {
+        success ? Message.info('截图成功') : Message.error('截图失败')
+      }
     },
     saveImage() {
       const { image } = this.$refs, { src } = image
@@ -318,7 +335,7 @@ export const App = defineComponent({
         const { title, url } = state
         if (url != null) {
           vm.$refs.input.currentValue = url
-          vm.$_loadVideo(url, title)
+          vm.loadVideoInner(url, title)
           vm.title = title
         } else {
           replaceState(null)
@@ -408,7 +425,7 @@ export const App = defineComponent({
               h(CellGroup, { style: 'padding:0px' }, cache[__LINE__] ??= () => [
                 h(Cell, { title: '\u3000' }, cache[__LINE__] ??= {
                   extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => [
-                    h(Button, { onClick: vm.retry }, () => '重试'),
+                    h(Button, { onClick: vm.retry, loading: vm.retryLoading }, () => '重试'),
                     h(Button, { onClick: vm.options }, () => '设置'),
                     h(Button, { onClick: vm.captureImage }, () => '截图'),
                     h(Button, { onClick: vm.saveImage }, () => '保存截图')
@@ -424,12 +441,11 @@ export const App = defineComponent({
                     type: 'button',
                     modelValue: vm.size,
                     'onUpdate:modelValue': cache[__LINE__] ??= (value) => { vm.size = value }
-                  }, cache[__LINE__] ??= () => from(vm.sizes, size => h(Radio, { label: size }, () => size))),
+                  }, cache[__LINE__] ??= () => from(sizes, size => h(Radio, { label: size }, () => size))),
                 }),
                 h(Cell, { title: '快进快退' }, cache[__LINE__] ??= {
-                  extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => from(vm.relativeSeeks, (seek) => {
-                    const { value, slot } = (typeof seek == 'number' ? { value: seek, slot: String(seek) } : seek)
-                    return h(Button, { onClick() { vm.relativeSeek(value) } }, () => slot)
+                  extra: () => h(ButtonGroup, null, cache[__LINE__] ??= () => from(relativeSeeks, (seek) => {
+                    return h(Button, { onClick() { vm.relativeSeek(seek.value) } }, () => seek.slot)
                   }))
                 }),
                 h(Cell, null, cache[__LINE__] ??= {
@@ -472,13 +488,13 @@ export const App = defineComponent({
         ])
       ]),
       h(DPlayerVue, {
-        ref: 'player', width: +size[0], height: +size[1]
+        ref: 'player', width: +size[0], height: +size[1],
+        style: { 'border-color': vm.error != null ? 'red' : null }
       }, cache[__LINE__] ??= () => h(BarVue, {
         video: vm.player?.video,
         onRatechange: vm.handleRateChange,
-        style: cache[__LINE__] ??= {
-          position: 'relative', bottom: 'unset'
-        }
+        onError: vm.handleError,
+        style: 'position:relative;bottom:unset'
       })),
       h('div', { class: 'container', style: 'margin:5px auto 240px' }, [
         h(Card, { style: 'width:274px' }, cache[__LINE__] ??= () => h('img', {

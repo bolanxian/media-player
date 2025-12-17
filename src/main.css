@@ -50,11 +50,11 @@
   animation: loading-bar-inner--spinner 5s cubic-bezier(.55, .06, .68, .19) infinite;
 }
 
-.ivu-loading-bar-inner-color--buffered {
+.player-bar-inner-color-buffered {
   background: rgba(127, 127, 127, .6);
 }
 
-.ivu-loading-bar.ivu-loading-bar--player {
+.player-bar.ivu-loading-bar {
   height: 5px;
   top: unset;
   bottom: 5px;
@@ -62,13 +62,13 @@
   z-index: 999;
 }
 
-.ivu-loading-bar.ivu-loading-bar--player>.ivu-loading-bar-inner {
+.player-bar.ivu-loading-bar>.ivu-loading-bar-inner {
   height: 5px;
   position: absolute;
   transition: unset !important;
 }
 
-.ivu-loading-bar.ivu-loading-bar--player>.ivu-loading-bar-inner.ivu-loading-bar-inner--pointer {
+.player-bar.ivu-loading-bar>.player-bar-pointer.ivu-loading-bar-inner {
   background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2IDE1Ij48cGF0aCBkPSJNMCAwSDZMMyA1Wk0wIDE1SDZMMyAxMFoiIGZpbGw9InJlZCIvPjwvc3ZnPg");
   margin-left: -3px;
   width: 6px;
